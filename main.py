@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import datetime
 
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
@@ -18,8 +19,7 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-
-
+from gym_grasping.envs.grasping_env import GraspingEnv
 args = get_args()
 
 assert args.algo in ['a2c', 'ppo', 'acktr']
@@ -36,6 +36,11 @@ if args.cuda and torch.cuda.is_available() and args.cuda_deterministic:
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+root_dir = "/home/kuka/lang/robot/training_logs"
+args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+args.log_dir = os.path.join(root_dir, args.training_name)
+args.save_dir = os.path.join(args.log_dir, "save")
+
 try:
     os.makedirs(args.log_dir)
 except OSError:
@@ -43,7 +48,7 @@ except OSError:
     for f in files:
         os.remove(f)
 
-eval_log_dir = args.log_dir + "_eval"
+eval_log_dir = os.path.join(args.log_dir, "_eval")
 
 try:
     os.makedirs(eval_log_dir)
@@ -212,7 +217,7 @@ def main():
         if args.vis and j % args.vis_interval == 0:
             try:
                 # Sometimes monitor doesn't properly flush the outputs
-                win = visdom_plot(viz, win, args.log_dir, args.env_name,
+                win = visdom_plot(viz, win, args.log_dir, args.training_name,
                                   args.algo, args.num_env_steps)
             except IOError:
                 pass
