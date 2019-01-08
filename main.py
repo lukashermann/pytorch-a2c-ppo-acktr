@@ -3,6 +3,7 @@ import glob
 import os
 import time
 from collections import deque
+import sys
 
 import gym
 import numpy as np
@@ -20,45 +21,56 @@ from a2c_ppo_acktr.storage import RolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
 from gym_grasping.envs.grasping_env import GraspingEnv
-args = get_args()
-
-assert args.algo in ['a2c', 'ppo', 'acktr']
-if args.recurrent_policy:
-    assert args.algo in ['a2c', 'ppo'], \
-        'Recurrent policy is not implemented for ACKTR'
-
-num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
-
-torch.manual_seed(args.seed)
-torch.cuda.manual_seed_all(args.seed)
-
-if args.cuda and torch.cuda.is_available() and args.cuda_deterministic:
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-
-root_dir = "/home/kuka/lang/robot/training_logs"
-args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-args.log_dir = os.path.join(root_dir, args.training_name)
-args.save_dir = os.path.join(args.log_dir, "save")
-
-try:
-    os.makedirs(args.log_dir)
-except OSError:
-    files = glob.glob(os.path.join(args.log_dir, '*.monitor.csv'))
-    for f in files:
-        os.remove(f)
-
-eval_log_dir = os.path.join(args.log_dir, "_eval")
-
-try:
-    os.makedirs(eval_log_dir)
-except OSError:
-    files = glob.glob(os.path.join(eval_log_dir, '*.monitor.csv'))
-    for f in files:
-        os.remove(f)
+from tensorboardX import SummaryWriter
 
 
-def main():
+def train(sysargs):
+    args = get_args(sysargs)
+
+    assert args.algo in ['a2c', 'ppo', 'acktr']
+    if args.recurrent_policy:
+        assert args.algo in ['a2c', 'ppo'], \
+            'Recurrent policy is not implemented for ACKTR'
+
+    num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
+
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+
+    if args.cuda and torch.cuda.is_available() and args.cuda_deterministic:
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+
+    # args.root_dir = "/home/kuka/lang/robot/training_logs"
+    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    args.log_dir = os.path.join(args.root_dir, args.training_name)
+    args.save_dir = os.path.join(args.log_dir, "save")
+    args.tensorboard = True
+    if args.tensorboard:
+        tb_writer = SummaryWriter(log_dir=os.path.join(args.log_dir, "tb"))
+
+    try:
+        os.makedirs(args.log_dir)
+    except OSError:
+        files = glob.glob(os.path.join(args.log_dir, '*.monitor.csv'))
+        for f in files:
+            os.remove(f)
+
+    eval_log_dir = os.path.join(args.log_dir, "_eval")
+
+    try:
+        os.makedirs(eval_log_dir)
+    except OSError:
+        files = glob.glob(os.path.join(eval_log_dir, '*.monitor.csv'))
+        for f in files:
+            os.remove(f)
+
+    with open(os.path.join(args.log_dir, "args_log.txt"), "w") as file:
+        for arg in vars(args):
+            file.write(str(arg) + ' ' + str(getattr(args, arg)) + '\n')
+
+    log_file = open(os.path.join(args.log_dir, "log.txt"), "wt")
+
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
@@ -165,16 +177,21 @@ def main():
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
-            print("Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
-                format(j, total_num_steps,
-                       int(total_num_steps / (end - start)),
-                       len(episode_rewards),
-                       np.mean(episode_rewards),
-                       np.median(episode_rewards),
-                       np.min(episode_rewards),
-                       np.max(episode_rewards), dist_entropy,
-                       value_loss, action_loss))
-
+            log_output = "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward " \
+                         "{:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(j,
+                                                                                total_num_steps,
+                                                                                int(total_num_steps / (end - start)),
+                                                                                len(episode_rewards),
+                                                                                np.mean(episode_rewards),
+                                                                                np.median(episode_rewards),
+                                                                                np.min(episode_rewards),
+                                                                                np.max(episode_rewards),
+                                                                                dist_entropy,
+                                                                                value_loss,
+                                                                                action_loss)
+            print(log_output)
+            log_file.write(log_output)
+            log_file.flush()
         if (args.eval_interval is not None
                 and len(episode_rewards) > 1
                 and j % args.eval_interval == 0):
@@ -221,8 +238,12 @@ def main():
                                   args.algo, args.num_env_steps)
             except IOError:
                 pass
-            
+
+        if args.tensorboard and len(episode_rewards) > 1:
+            tb_writer.add_scalar("eprewmean", np.mean(episode_rewards), j)
+    if args.tensorboard:
+        tb_writer.close()
 
 
 if __name__ == "__main__":
-    main()
+    train(sys.argv[1:])

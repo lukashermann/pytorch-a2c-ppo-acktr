@@ -3,7 +3,7 @@ import argparse
 import torch
 
 
-def get_args():
+def get_args(sysargs):
     parser = argparse.ArgumentParser(description='RL')
     parser.add_argument('--algo', default='a2c',
                         help='algorithm to use: a2c | ppo | acktr')
@@ -51,6 +51,8 @@ def get_args():
                         help='number of environment steps to train (default: 10e6)')
     parser.add_argument('--env-name', default='PongNoFrameskip-v4',
                         help='environment to train on (default: PongNoFrameskip-v4)')
+    parser.add_argument('--root-dir', default='/home/kuka/lang/robot/training_logs',
+                        help='directory to save agent logs (default: /tmp/gym)')
     parser.add_argument('--log-dir', default='/tmp/gym/',
                         help='directory to save agent logs (default: /tmp/gym)')
     parser.add_argument('--save-dir', default='./trained_models/',
@@ -69,7 +71,7 @@ def get_args():
                         help='enable visdom visualization')
     parser.add_argument('--port', type=int, default=8097,
                         help='port to run the server on (default: 8097)')
-    args = parser.parse_args()
+    args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
