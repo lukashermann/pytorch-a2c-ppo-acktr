@@ -4,6 +4,7 @@ import os
 import time
 from collections import deque
 import sys
+import cv2
 
 import gym
 import numpy as np
@@ -25,7 +26,7 @@ from tensorboardX import SummaryWriter
 
 
 def train(sysargs):
-    args = get_args(sysargs)
+    args = get_args(sysargs[1:])
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
     if args.recurrent_policy:
@@ -65,7 +66,8 @@ def train(sysargs):
         for f in files:
             os.remove(f)
 
-    with open(os.path.join(args.log_dir, "args_log.txt"), "w") as file:
+    with open(os.path.join(args.log_dir, "hyperparams.txt"), "w") as file:
+        file.write("python " + " ".join(sysargs) + "\n")
         for arg in vars(args):
             file.write(str(arg) + ' ' + str(getattr(args, arg)) + '\n')
 
@@ -134,6 +136,13 @@ def train(sysargs):
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
+
+            # visualize env 0
+            # img = obs.cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
+            # cv2.imshow("win", cv2.resize(img, (300,300)))
+            # cv2.waitKey(1)
+            # if done[0]:
+            #     print(step)
 
             for info in infos:
                 if 'episode' in info.keys():
@@ -246,4 +255,4 @@ def train(sysargs):
 
 
 if __name__ == "__main__":
-    train(sys.argv[1:])
+    train(sys.argv)
