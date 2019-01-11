@@ -1,12 +1,12 @@
 import argparse
 import os
-
+import cv2
 import numpy as np
 import torch
 
 from a2c_ppo_acktr.envs import VecPyTorch, make_vec_envs
 from a2c_ppo_acktr.utils import get_render_func, get_vec_normalize
-
+from gym_grasping.envs.grasping_env import GraspingEnv
 
 # workaround to unpickle olf model files
 import sys
@@ -49,7 +49,7 @@ recurrent_hidden_states = torch.zeros(1, actor_critic.recurrent_hidden_state_siz
 masks = torch.zeros(1, 1)
 
 if render_func is not None:
-    render_func('human')
+    render_func('rgb_array')
 
 obs = env.reset()
 
@@ -79,4 +79,8 @@ while True:
             p.resetDebugVisualizerCamera(distance, yaw, -20, humanPos)
 
     if render_func is not None:
-        render_func('human')
+        img = render_func('rgb_array')
+        cv2.imshow("win", cv2.resize(img, (300, 300)))
+        cv2.waitKey(1)
+    if done:
+        env.reset()
