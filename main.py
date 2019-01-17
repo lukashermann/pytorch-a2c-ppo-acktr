@@ -21,7 +21,8 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-from gym_grasping.envs.grasping_env import GraspingEnv
+# from gym_grasping.envs.grasping_env import GraspingEnv
+from gym_grasping.envs.curriculum_env import CurriculumEnv
 from tensorboardX import SummaryWriter
 
 
@@ -135,7 +136,7 @@ def train(sysargs):
                         rollouts.masks[step])
 
             # Obser reward and next obs
-            obs, reward, done, infos = envs.step(action)
+            obs, reward, done, infos = envs.step_with_curriculum_reset(action)
 
             # visualize env 0
             # img = obs.cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
@@ -239,6 +240,8 @@ def train(sysargs):
             print(" Evaluation using {} episodes: mean reward {:.5f}\n".
                 format(len(eval_episode_rewards),
                        np.mean(eval_episode_rewards)))
+            if args.tensorboard:
+                tb_writer.add_scalar("eval_eprewmean", np.mean(eval_episode_rewards), j)
 
         if args.vis and j % args.vis_interval == 0:
             try:
