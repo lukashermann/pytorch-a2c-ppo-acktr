@@ -21,8 +21,7 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-# from gym_grasping.envs.grasping_env import GraspingEnv
-from gym_grasping.envs.curriculum_env import CurriculumEnv
+from gym_grasping.envs.grasping_env import GraspingEnv
 from tensorboardX import SummaryWriter
 
 
@@ -83,10 +82,10 @@ def train(sysargs):
         win = None
 
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                        args.gamma, args.log_dir, args.add_timestep, device, False)
+                         args.gamma, args.log_dir, args.add_timestep, device, False)
 
     actor_critic = Policy(envs.observation_space.shape, envs.action_space,
-        base_kwargs={'recurrent': args.recurrent_policy})
+                          base_kwargs={'recurrent': args.recurrent_policy})
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -97,15 +96,15 @@ def train(sysargs):
     elif args.algo == 'ppo':
         agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
-                               eps=args.eps,
-                               max_grad_norm=args.max_grad_norm)
+                         eps=args.eps,
+                         max_grad_norm=args.max_grad_norm)
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, acktr=True)
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                        envs.observation_space.shape, envs.action_space,
-                        actor_critic.recurrent_hidden_state_size)
+                              envs.observation_space.shape, envs.action_space,
+                              actor_critic.recurrent_hidden_state_size)
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
@@ -125,18 +124,22 @@ def train(sysargs):
                 update_linear_schedule(agent.optimizer, j, num_updates, args.lr)
 
         if args.algo == 'ppo' and args.use_linear_clip_decay:
-            agent.clip_param = args.clip_param  * (1 - j / float(num_updates))
+            agent.clip_param = args.clip_param * (1 - j / float(num_updates))
 
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        rollouts.obs[step],
-                        rollouts.recurrent_hidden_states[step],
-                        rollouts.masks[step])
+                    rollouts.obs[step],
+                    rollouts.recurrent_hidden_states[step],
+                    rollouts.masks[step])
 
+            data = {'update_step': j,
+                    'num_updates': num_updates,
+                    'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None
+                    }
             # Obser reward and next obs
-            obs, reward, done, infos = envs.step_with_curriculum_reset(action)
+            obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
 
             # visualize env 0
             # img = obs.cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
@@ -218,7 +221,7 @@ def train(sysargs):
 
             obs = eval_envs.reset()
             eval_recurrent_hidden_states = torch.zeros(args.num_processes,
-                            actor_critic.recurrent_hidden_state_size, device=device)
+                                                       actor_critic.recurrent_hidden_state_size, device=device)
             eval_masks = torch.zeros(args.num_processes, 1, device=device)
 
             while len(eval_episode_rewards) < 10:
@@ -236,12 +239,18 @@ def train(sysargs):
                         eval_episode_rewards.append(info['episode']['r'])
 
             eval_envs.close()
-
-            print(" Evaluation using {} episodes: mean reward {:.5f}\n".
-                format(len(eval_episode_rewards),
-                       np.mean(eval_episode_rewards)))
             if args.tensorboard:
-                tb_writer.add_scalar("eval_eprewmean", np.mean(eval_episode_rewards), j)
+                tb_writer.add_scalar("eval_eprewmean_updates", np.mean(eval_episode_rewards), j)
+                tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards), total_num_steps)
+
+            eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(len(eval_episode_rewards),
+                                                                                           np.mean(
+                                                                                               eval_episode_rewards))
+            print()
+            print(eval_log_output)
+            print()
+            log_file.write(eval_log_output)
+            log_file.flush()
 
         if args.vis and j % args.vis_interval == 0:
             try:
@@ -252,7 +261,8 @@ def train(sysargs):
                 pass
 
         if args.tensorboard and len(episode_rewards) > 1:
-            tb_writer.add_scalar("eprewmean", np.mean(episode_rewards), j)
+            tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), j)
+            tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
     if args.tensorboard:
         tb_writer.close()
 

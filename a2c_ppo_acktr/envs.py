@@ -144,8 +144,8 @@ class VecPyTorch(VecEnvWrapper):
         obs = torch.from_numpy(obs).float().to(self.device)
         return obs
 
-    def reset_from_curriculum(self):
-        obs = self.venv.reset_from_curriculum()
+    def reset_from_curriculum(self, data):
+        obs = self.venv.reset_from_curriculum(data)
         obs = torch.from_numpy(obs).float().to(self.device)
         return obs
 
@@ -153,9 +153,9 @@ class VecPyTorch(VecEnvWrapper):
         actions = actions.squeeze(1).cpu().numpy()
         self.venv.step_async(actions)
 
-    def step_async_with_curriculum_reset(self, actions):
+    def step_async_with_curriculum_reset(self, actions, data):
         actions = actions.squeeze(1).cpu().numpy()
-        self.venv.step_async_with_curriculum_reset(actions)
+        self.venv.step_async_with_curriculum_reset(actions, data)
 
     def step_wait(self):
         obs, reward, done, info = self.venv.step_wait()
