@@ -110,7 +110,7 @@ def train(sysargs):
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=10)
+    episode_rewards = deque(maxlen=20)
 
     start = time.time()
     for j in range(num_updates):
@@ -208,6 +208,8 @@ def train(sysargs):
         if (args.eval_interval is not None
                 and len(episode_rewards) > 1
                 and j % args.eval_interval == 0):
+            eval_steps = 32 if j < num_updates - 1 else 100
+
             eval_envs = make_vec_envs(
                 args.env_name, args.seed + args.num_processes, args.num_processes,
                 args.gamma, eval_log_dir, args.add_timestep, device, True)
@@ -224,7 +226,7 @@ def train(sysargs):
                                                        actor_critic.recurrent_hidden_state_size, device=device)
             eval_masks = torch.zeros(args.num_processes, 1, device=device)
 
-            while len(eval_episode_rewards) < 10:
+            while len(eval_episode_rewards) <= eval_steps:
                 with torch.no_grad():
                     _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                         obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
