@@ -111,6 +111,10 @@ def train(sysargs):
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=20)
+    difficulty = 0
+    desired_rew_region = args.desired_rew_region
+    incr = args.incr
+    eval_episode_rewards = []
 
     start = time.time()
     for j in range(num_updates):
@@ -136,8 +140,9 @@ def train(sysargs):
 
             data = {'update_step': j,
                     'num_updates': num_updates,
-                    'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None
-                    }
+                    'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None,
+                    'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else None,
+                    'difficulty': difficulty}
             # Obser reward and next obs
             obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
 
@@ -151,12 +156,17 @@ def train(sysargs):
             for info in infos:
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
-
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                        for done_ in done])
             rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
 
+        if args.adaptive_curriculum and len(episode_rewards) > 1:
+            if len(episode_rewards) > 1 and np.mean(episode_rewards) > desired_rew_region[1]:
+                difficulty += incr
+            elif len(episode_rewards) > 1 and np.mean(episode_rewards) < desired_rew_region[0]:
+                difficulty -= incr
+            difficulty = np.clip(difficulty, 0, 1)
         with torch.no_grad():
             next_value = actor_critic.get_value(rollouts.obs[-1],
                                                 rollouts.recurrent_hidden_states[-1],
@@ -265,6 +275,11 @@ def train(sysargs):
         if args.tensorboard and len(episode_rewards) > 1:
             tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), j)
             tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
+            tb_writer.add_scalar("difficulty", difficulty, total_num_steps)
+            tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
+            tb_writer.add_scalar("action_loss", action_loss, total_num_steps)
+            tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
+
     if args.tensorboard:
         tb_writer.close()
 

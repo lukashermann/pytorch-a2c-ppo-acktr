@@ -71,6 +71,13 @@ def get_args(sysargs):
                         help='enable visdom visualization')
     parser.add_argument('--port', type=int, default=8097,
                         help='port to run the server on (default: 8097)')
+    # curriculum arguments
+    parser.add_argument('--adaptive-curriculum', action='store_true', default=False,
+                        help='use an adaptive curriculum')
+    parser.add_argument('--desired-rew-region', type=tuple, default=(0.4, 0.6),
+                        help='the desired range of train rewards')
+    parser.add_argument('--incr', type=float, default=0.002,
+                        help='the inrement (decrement) if train rewards go out of desired region')
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
