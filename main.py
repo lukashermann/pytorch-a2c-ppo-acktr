@@ -111,6 +111,9 @@ def train(sysargs):
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=20)
+    curr_episode_rewards = deque(maxlen=20)
+    num_regular_resets = 0
+    num_resets = 0
     difficulty = 0
     desired_rew_region = args.desired_rew_region
     incr = args.incr
@@ -141,6 +144,7 @@ def train(sysargs):
             data = {'update_step': j,
                     'num_updates': num_updates,
                     'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None,
+                    'curr_eprewmean': np.mean(curr_episode_rewards) if len(curr_episode_rewards) > 1 else None,
                     'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else None,
                     'difficulty': difficulty}
             # Obser reward and next obs
@@ -156,15 +160,20 @@ def train(sysargs):
             for info in infos:
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
+                    if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
+                        curr_episode_rewards.append(info['episode']['r'])
+                    elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
+                        num_regular_resets += 1
+                    num_resets += 1
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                        for done_ in done])
             rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
 
-        if args.adaptive_curriculum and len(episode_rewards) > 1:
-            if len(episode_rewards) > 1 and np.mean(episode_rewards) > desired_rew_region[1]:
+        if args.adaptive_curriculum and len(curr_episode_rewards) > 1:
+            if np.mean(curr_episode_rewards) > desired_rew_region[1]:
                 difficulty += incr
-            elif len(episode_rewards) > 1 and np.mean(episode_rewards) < desired_rew_region[0]:
+            elif np.mean(curr_episode_rewards) < desired_rew_region[0]:
                 difficulty -= incr
             difficulty = np.clip(difficulty, 0, 1)
         with torch.no_grad():
@@ -256,8 +265,8 @@ def train(sysargs):
                 tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards), total_num_steps)
 
             eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(len(eval_episode_rewards),
-                                                                                           np.mean(
-                                                                                               eval_episode_rewards))
+                                                                                              np.mean(
+                                                                                                  eval_episode_rewards))
             print()
             print(eval_log_output)
             print()
@@ -279,6 +288,9 @@ def train(sysargs):
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
             tb_writer.add_scalar("action_loss", action_loss, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
+        if args.tensorboard and len(curr_episode_rewards) > 1:
+            tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards), total_num_steps)
+            tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets, total_num_steps)
 
     if args.tensorboard:
         tb_writer.close()
