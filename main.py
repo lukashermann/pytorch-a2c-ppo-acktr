@@ -112,8 +112,7 @@ def train(sysargs):
 
     episode_rewards = deque(maxlen=20)
     curr_episode_rewards = deque(maxlen=20)
-    num_regular_resets = 0
-    num_resets = 0
+
     difficulty = 0
     desired_rew_region = args.desired_rew_region
     incr = args.incr
@@ -121,7 +120,8 @@ def train(sysargs):
 
     start = time.time()
     for j in range(num_updates):
-
+        num_regular_resets = 0
+        num_resets = 0
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
             if args.algo == "acktr":
@@ -144,8 +144,8 @@ def train(sysargs):
             data = {'update_step': j,
                     'num_updates': num_updates,
                     'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None,
-                    'curr_eprewmean': np.mean(curr_episode_rewards) if len(curr_episode_rewards) > 1 else None,
-                    'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else None,
+                    'curr_eprewmean': np.mean(curr_episode_rewards) if len(curr_episode_rewards) > 1 else 0,
+                    'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
                     'difficulty': difficulty}
             # Obser reward and next obs
             obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
@@ -161,10 +161,11 @@ def train(sysargs):
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
                     if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
+                        num_resets += 1
                         curr_episode_rewards.append(info['episode']['r'])
                     elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
                         num_regular_resets += 1
-                    num_resets += 1
+                        num_resets += 1
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                        for done_ in done])
