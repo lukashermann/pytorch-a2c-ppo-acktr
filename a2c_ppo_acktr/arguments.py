@@ -77,7 +77,7 @@ def get_args(sysargs):
     parser.add_argument('--desired-rew-region', type=tuple, default=(0.4, 0.6),
                         help='the desired range of train rewards')
     parser.add_argument('--incr', type=float, default=0.002,
-                        help='the inrement (decrement) if train rewards go out of desired region')
+                        help='the increment (decrement) if train rewards go out of desired region')
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

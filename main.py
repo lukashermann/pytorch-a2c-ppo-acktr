@@ -285,13 +285,14 @@ def train(sysargs):
         if args.tensorboard and len(episode_rewards) > 1:
             tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), j)
             tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
+            tb_writer.add_scalar("eprewmedian_steps", np.median(episode_rewards), total_num_steps)
             tb_writer.add_scalar("difficulty", difficulty, total_num_steps)
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
             tb_writer.add_scalar("action_loss", action_loss, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
         if args.tensorboard and len(curr_episode_rewards) > 1:
             tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards), total_num_steps)
-            tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets, total_num_steps)
+            tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets if num_resets > 0 else 0, total_num_steps)
 
     if args.tensorboard:
         tb_writer.close()
