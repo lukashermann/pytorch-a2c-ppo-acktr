@@ -39,9 +39,27 @@ class AddBias(nn.Module):
 
         return x + bias
 
+
 def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
     """Decreases the learning rate linearly"""
     lr = initial_lr - (initial_lr * (epoch / float(total_num_epochs)))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+
+def update_linear_schedule_less(optimizer, epoch, total_num_epochs, initial_lr):
+    """Decreases the lr linearly (half as much as normal)"""
+    lr = initial_lr - (initial_lr * (epoch / float(2 * total_num_epochs)))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+
+def update_linear_schedule_half(optimizer, epoch, total_num_epochs, initial_lr):
+    """Decreases the lr linearly till middle of training"""
+    if epoch > total_num_epochs / 2:
+        lr = initial_lr / 2
+    else:
+        lr = initial_lr - (initial_lr * (epoch / float(total_num_epochs)))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 

@@ -19,7 +19,7 @@ from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
-from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
+from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, update_linear_schedule_less
 from a2c_ppo_acktr.visualize import visdom_plot
 from gym_grasping.envs.grasping_env import GraspingEnv
 from tensorboardX import SummaryWriter
@@ -129,9 +129,14 @@ def train(sysargs):
                 update_linear_schedule(agent.optimizer, j, num_updates, agent.optimizer.lr)
             else:
                 update_linear_schedule(agent.optimizer, j, num_updates, args.lr)
-
+        elif args.use_linear_lr_decay_less and args.algo == "ppo":
+            update_linear_schedule_less(agent.optimizer, j, num_updates, args.lr)
+        elif args.use_linear_lr_decay_half and args.algo == "ppo":
+            update_linear_schedule_half(agent.optimizer, j, num_updates, args.lr)
         if args.algo == 'ppo' and args.use_linear_clip_decay:
             agent.clip_param = args.clip_param * (1 - j / float(num_updates))
+        elif args.algo == 'ppo' and args.use_linear_clip_decay_less:
+            agent.clip_param = args.clip_param * (1 - j / float(2 * num_updates))
 
         for step in range(args.num_steps):
             # Sample actions
