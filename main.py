@@ -112,7 +112,8 @@ def train(sysargs):
 
     episode_rewards = deque(maxlen=20)
     curr_episode_rewards = deque(maxlen=20)
-    reg_episode_rewards = deque(maxlen=32)
+    reg_episode_rewards = deque(maxlen=20)
+    eval_reg_episode_rewards = deque(maxlen=32)
     difficulty = 0
     desired_rew_region = args.desired_rew_region
     incr = args.incr
@@ -152,6 +153,7 @@ def train(sysargs):
                     'curr_eprewmean': np.mean(curr_episode_rewards) if len(curr_episode_rewards) > 1 else 0,
                     'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
                     'reg_eprewmean': np.mean(reg_episode_rewards) if len(reg_episode_rewards) > 1 else 0,
+                    'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(eval_reg_episode_rewards) > 1 else 0,
                     'difficulty': difficulty}
             # Obser reward and next obs
             obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
@@ -173,6 +175,7 @@ def train(sysargs):
                         num_regular_resets += 1
                         num_resets += 1
                         reg_episode_rewards.append(info['episode']['r'])
+                        eval_reg_episode_rewards.append(info['episode']['r'])
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                        for done_ in done])
@@ -266,7 +269,7 @@ def train(sysargs):
                 for info in infos:
                     if 'episode' in info.keys():
                         eval_episode_rewards.append(info['episode']['r'])
-                        reg_episode_rewards.append(info['episode']['r'])
+                        eval_reg_episode_rewards.append(info['episode']['r'])
 
             eval_envs.close()
             if args.tensorboard:
@@ -301,6 +304,8 @@ def train(sysargs):
         if args.tensorboard and len(curr_episode_rewards) > 1:
             tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards), total_num_steps)
             tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets if num_resets > 0 else 0, total_num_steps)
+        if args.tensorboard and len(reg_episode_rewards) > 1:
+            tb_writer.add_scalar("reg_eprewmean_steps", np.mean(reg_episode_rewards), total_num_steps)
 
     if args.tensorboard:
         tb_writer.close()
