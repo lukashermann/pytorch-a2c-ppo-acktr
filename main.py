@@ -159,11 +159,12 @@ def train(sysargs):
             obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
 
             # visualize env 0
-            # img = obs.cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
-            # cv2.imshow("win", cv2.resize(img, (300,300)))
-            # cv2.waitKey(1)
+            # img = obs.cpu().numpy()[1, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
+            # cv2.imshow("win", cv2.resize(img, (300, 300)))
+            # cv2.waitKey(10)
             # if done[0]:
-            #     print(step)
+            #     print(reward)
+
 
             for info in infos:
                 if 'episode' in info.keys():
@@ -275,6 +276,8 @@ def train(sysargs):
             if args.tensorboard:
                 tb_writer.add_scalar("eval_eprewmean_updates", np.mean(eval_episode_rewards), j)
                 tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards), total_num_steps)
+                tb_writer.add_scalar("eval_success_rate", np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
+                                     total_num_steps)
 
             eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(len(eval_episode_rewards),
                                                                                               np.mean(
@@ -296,6 +299,8 @@ def train(sysargs):
         if args.tensorboard and len(episode_rewards) > 1:
             tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), j)
             tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
+            tb_writer.add_scalar("training_success_rate", np.mean(np.array(episode_rewards) > 0).astype(np.float),
+                                 total_num_steps)
             tb_writer.add_scalar("eprewmedian_steps", np.median(episode_rewards), total_num_steps)
             tb_writer.add_scalar("difficulty", difficulty, total_num_steps)
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
