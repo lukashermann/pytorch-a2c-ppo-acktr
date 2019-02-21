@@ -4,13 +4,14 @@ import gym
 import numpy as np
 import torch
 from gym.spaces.box import Box
-
+from gym.spaces.dict_space import Dict
 from baselines import bench
 from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
+from baselines.common.vec_env.vec_normalize import DictVecNormalize as DictVecNormalize_
 
 
 try:
@@ -31,16 +32,7 @@ except ImportError:
 
 def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
     def _thunk():
-        if env_id.startswith("dm"):
-            _, domain, task = env_id.split('.')
-            env = dm_control2gym.make(domain_name=domain, task_name=task)
-        else:
-            env = gym.make(env_id)
-
-        is_atari = hasattr(gym.envs, 'atari') and isinstance(
-            env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
-        if is_atari:
-            env = make_atari(env_id)
+        env = gym.make(env_id)
 
         env.seed(seed + rank)
 
@@ -54,18 +46,23 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
             env = bench.Monitor(env, os.path.join(log_dir, str(rank)),
                                 allow_early_resets=allow_early_resets)
 
-        if is_atari:
-            if len(env.observation_space.shape) == 3:
-                env = wrap_deepmind(env)
+        # if is_atari:
+        #     if len(env.observation_space.shape) == 3:
+        #         env = wrap_deepmind(env)
         # elif len(env.observation_space.shape) == 3:
         #     raise NotImplementedError("CNN models work only for atari,\n"
         #         "please use a custom wrapper for a custom pixel input env.\n"
         #         "See wrap_deepmind for an example.")
 
         # If the input has shape (W,H,3), wrap for PyTorch convolutions
-        obs_shape = env.observation_space.shape
-        if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
-            env = TransposeImage(env)
+        if isinstance(env.observation_space, Dict):
+            obs_shape = env.observation_space.spaces['img'].shape
+            if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
+                env = DictTransposeImage(env)
+        else:
+            obs_shape = env.observation_space.shape
+            if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
+                env = TransposeImage(env)
 
         return env
 
@@ -81,13 +78,21 @@ def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
     else:
         envs = DummyVecEnv(envs)
 
-    if len(envs.observation_space.shape) == 1:
+    if isinstance(envs.observation_space, Dict):
+        if gamma is None:
+            envs = DictVecNormalize(envs, ret=False)
+        else:
+            envs = DictVecNormalize(envs, gamma=gamma)
+    elif len(envs.observation_space.shape) == 1:
         if gamma is None:
             envs = VecNormalize(envs, ret=False)
         else:
             envs = VecNormalize(envs, gamma=gamma)
 
-    envs = VecPyTorch(envs, device)
+    if isinstance(envs.observation_space, Dict):
+        envs = DictVecPyTorch(envs, device)
+    else:
+        envs = VecPyTorch(envs, device)
 
     if num_frame_stack is not None:
         envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
@@ -132,6 +137,21 @@ class TransposeImage(gym.ObservationWrapper):
         return observation.transpose(2, 0, 1)
 
 
+class DictTransposeImage(gym.ObservationWrapper):
+    def __init__(self, env=None):
+        super(DictTransposeImage, self).__init__(env)
+        img_obs_shape = self.observation_space.spaces['img'].shape
+        self.observation_space.spaces['img'] = Box(
+            self.observation_space.spaces['img'].low[0, 0, 0],
+            self.observation_space.spaces['img'].high[0, 0, 0],
+            [img_obs_shape[2], img_obs_shape[1], img_obs_shape[0]],
+            dtype=self.observation_space.spaces['img'].dtype)
+
+    def observation(self, observation):
+        observation['img'] = observation['img'].transpose(2, 0, 1)
+        return observation
+
+
 class VecPyTorch(VecEnvWrapper):
     def __init__(self, venv, device):
         """Return only every `skip`-th frame"""
@@ -164,6 +184,44 @@ class VecPyTorch(VecEnvWrapper):
         return obs, reward, done, info
 
 
+class DictVecPyTorch(VecEnvWrapper):
+    def __init__(self, venv, device):
+        """Return only every `skip`-th frame"""
+        super(DictVecPyTorch, self).__init__(venv)
+        self.device = device
+        # TODO: Fix data types
+
+    def reset(self):
+        obs = self.venv.reset()
+        obs = {'img': torch.from_numpy(obs['img']).float().to(self.device),
+               'robot_state': torch.from_numpy(obs['robot_state']).float().to(self.device),
+               'task_state': torch.from_numpy(obs['task_state']).float().to(self.device)}
+        return obs
+
+    def reset_from_curriculum(self, data):
+        obs = self.venv.reset_from_curriculum(data)
+        obs = {'img': torch.from_numpy(obs['img']).float().to(self.device),
+               'robot_state': torch.from_numpy(obs['robot_state']).float().to(self.device),
+               'task_state': torch.from_numpy(obs['task_state']).float().to(self.device)}
+        return obs
+
+    def step_async(self, actions):
+        actions = actions.squeeze(1).cpu().numpy()
+        self.venv.step_async(actions)
+
+    def step_async_with_curriculum_reset(self, actions, data):
+        actions = actions.squeeze(1).cpu().numpy()
+        self.venv.step_async_with_curriculum_reset(actions, data)
+
+    def step_wait(self):
+        obs, reward, done, info = self.venv.step_wait()
+        obs = {'img': torch.from_numpy(obs['img']).float().to(self.device),
+               'robot_state': torch.from_numpy(obs['robot_state']).float().to(self.device),
+               'task_state': torch.from_numpy(obs['task_state']).float().to(self.device)}
+        reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
+        return obs, reward, done, info
+
+
 class VecNormalize(VecNormalize_):
 
     def __init__(self, *args, **kwargs):
@@ -178,6 +236,42 @@ class VecNormalize(VecNormalize_):
             return obs
         else:
             return obs
+
+    def train(self):
+        self.training = True
+
+    def eval(self):
+        self.training = False
+
+
+class DictVecNormalize(DictVecNormalize_):
+
+    def __init__(self, *args, **kwargs):
+        super(DictVecNormalize, self).__init__(*args, **kwargs)
+        self.training = True
+
+    def _obfilt(self, obs):
+        if isinstance(obs, dict):
+            if self.ob_robot_rms:
+                if self.training:
+                    self.ob_robot_rms.update(obs['robot_state'])
+                obs['robot_state'] = np.clip((obs['robot_state'] - self.ob_robot_rms.mean) / np.sqrt(self.ob_robot_rms.var + self.epsilon), -self.clipob,
+                                             self.clipob)
+                if self.training:
+                    self.ob_task_rms.update(obs['task_state'])
+                obs['task_state'] = np.clip(
+                    (obs['task_state'] - self.ob_task_rms.mean) / np.sqrt(self.ob_task_rms.var + self.epsilon),
+                    -self.clipob,
+                    self.clipob)
+                return obs
+        else:
+            if self.ob_rms:
+                if self.training:
+                    self.ob_rms.update(obs)
+                obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
+                return obs
+            else:
+                return obs
 
     def train(self):
         self.training = True

@@ -12,24 +12,18 @@ class Flatten(nn.Module):
         return x.view(x.size(0), -1)
 
 
-class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, base=None, base_kwargs=None, share_layers=True):
-        super(Policy, self).__init__()
+class CombiPolicy(nn.Module):
+    def __init__(self, obs_space, action_space, base=None, base_kwargs=None, train_asymm=False, share_layers=True):
+        super(CombiPolicy, self).__init__()
         if base_kwargs is None:
             base_kwargs = {}
         if base is None:
-            if len(obs_shape) == 3:
-                if len(obs_shape) == 3:
-                    if share_layers:
-                        base = CNNShared
-                    else:
-                        base = CNNSeparate
-            elif len(obs_shape) == 1:
-                base = MLPBase
+            if train_asymm:
+                base = CNNAsymmCombi
             else:
-                raise NotImplementedError
+                base = CNNCombi
 
-        self.base = base(obs_shape[0], **base_kwargs)
+        self.base = base(obs_space, **base_kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
@@ -174,94 +168,152 @@ class NNBase(nn.Module):
         return x, hxs
 
 
-class CNNShared(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-        super(CNNShared, self).__init__(recurrent, hidden_size, hidden_size)
+class CNNAsymmCombi(NNBase):
+    def __init__(self, obs_space, recurrent=False, output_fc_size=128):
+        super(CNNAsymmCombi, self).__init__(recurrent, output_fc_size, output_fc_size)
+
+        state_fc_size = 64
+        cnn_fc_size = 512
+        img_obs_shape = obs_space.spaces['img'].shape[0]
+        robot_state_obs_shape = obs_space.spaces['robot_state'].shape[0]
+        task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
 
-        self.main = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+        self.cnn = nn.Sequential(
+            init_(nn.Conv2d(img_obs_shape, 32, 8, stride=4)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            init_(nn.Linear(32 * 7 * 7, cnn_fc_size)),
             nn.ReLU()
         )
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.actor_state = nn.Sequential(
+            init_(nn.Linear(robot_state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
+        )
+
+        self.critic_state = nn.Sequential(
+            init_(nn.Linear(robot_state_obs_shape + task_state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
+        )
+
+        self.actor_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
+
+        self.critic_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
 
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
         self.train()
 
     def forward(self, inputs, rnn_hxs, masks):
-        x = self.main(inputs / 255.0)
+        img_input = inputs['img']
+        robot_state_input = inputs['robot_state']
+        task_state_input = inputs['task_state']
 
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+        cnn_output = self.cnn(img_input / 255.0)
 
-        return self.critic_linear(x), x, rnn_hxs
+        h_actor1 = self.actor_state(robot_state_input)
+        h_critic1 = self.critic_state(torch.cat((robot_state_input, task_state_input), 1))
+
+        h_actor2 = self.actor_fuse(torch.cat((cnn_output, h_actor1), 1))
+        h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
+
+        return self.critic_linear(h_critic2), h_actor2, rnn_hxs
 
 
-class CNNSeparate(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-        super(CNNSeparate, self).__init__(recurrent, hidden_size, hidden_size)
+class CNNCombi(NNBase):
+    def __init__(self, obs_space, recurrent=False, output_fc_size=128):
+        super(CNNCombi, self).__init__(recurrent, output_fc_size, output_fc_size)
+
+        state_fc_size = 64
+        cnn_fc_size = 512
+        img_obs_shape = obs_space.spaces['img'].shape[0]
+        state_obs_shape = obs_space.spaces['robot_state'].shape[0]
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
 
-        self.actor = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
+        self.cnn = nn.Sequential(
+            init_(nn.Conv2d(img_obs_shape, 32, 8, stride=4)),
             nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
             init_(nn.Conv2d(64, 32, 3, stride=1)),
             nn.ReLU(),
             Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
+            init_(nn.Linear(32 * 7 * 7, cnn_fc_size)),
             nn.ReLU()
         )
 
-        self.critic = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
-            Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)),
-            nn.ReLU()
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.actor_state = nn.Sequential(
+            init_(nn.Linear(state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
         )
+
+        self.critic_state = nn.Sequential(
+            init_(nn.Linear(state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
+        )
+
+        self.actor_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
+
+        self.critic_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
 
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
         self.train()
 
     def forward(self, inputs, rnn_hxs, masks):
-        if self.is_recurrent:
-            raise NotImplementedError
-        x = inputs / 255.0
+        img_input = inputs['img']
+        state_input = inputs['robot_state']
 
-        hidden_critic = self.critic(x)
-        hidden_actor = self.actor(x)
+        cnn_output = self.cnn(img_input / 255.0)
 
-        return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
+        h_actor1 = self.actor_state(state_input)
+        h_critic1 = self.critic_state(state_input)
+
+        h_actor2 = self.actor_fuse(torch.cat((cnn_output, h_actor1), 1))
+        h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
+
+        return self.critic_linear(h_critic2), h_actor2, rnn_hxs
 
 
 class MLPBase(NNBase):

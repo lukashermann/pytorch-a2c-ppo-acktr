@@ -77,6 +77,10 @@ def get_args(sysargs):
                         help='enable visdom visualization')
     parser.add_argument('--port', type=int, default=8097,
                         help='port to run the server on (default: 8097)')
+    parser.add_argument('--combi-policy', action='store_true', default=False,
+                        help='use image and state input together')
+    parser.add_argument('--train-asymm', action='store_true', default=False,
+                        help='train policy with image and vf with full state')
     # curriculum arguments
     parser.add_argument('--adaptive-curriculum', action='store_true', default=False,
                         help='use an adaptive curriculum')

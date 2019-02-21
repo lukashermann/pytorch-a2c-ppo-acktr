@@ -18,7 +18,8 @@ from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
-from a2c_ppo_acktr.storage import RolloutStorage
+from a2c_ppo_acktr.combi_policy import CombiPolicy
+from a2c_ppo_acktr.storage import RolloutStorage, CombiRolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, update_linear_schedule_less
 from a2c_ppo_acktr.visualize import visdom_plot
 from gym_grasping.envs.grasping_env import GraspingEnv
@@ -84,8 +85,14 @@ def train(sysargs):
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, args.add_timestep, device, False)
 
-    actor_critic = Policy(envs.observation_space.shape, envs.action_space,
-                          base_kwargs={'recurrent': args.recurrent_policy})
+    if args.combi_policy:
+        actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
+                                   base_kwargs={'recurrent': args.recurrent_policy},
+                                   train_asymm=args.train_asymm,
+                                   share_layers=False)
+    else:
+        actor_critic = Policy(envs.observation_space.shape, envs.action_space,
+                              base_kwargs={'recurrent': args.recurrent_policy})
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -102,12 +109,19 @@ def train(sysargs):
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, acktr=True)
 
-    rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                              envs.observation_space.shape, envs.action_space,
-                              actor_critic.recurrent_hidden_state_size)
-
     obs = envs.reset()
-    rollouts.obs[0].copy_(obs)
+    if args.combi_policy:
+        rollouts = CombiRolloutStorage(args.num_steps, args.num_processes,
+                                       envs.observation_space, envs.action_space,
+                                       actor_critic.recurrent_hidden_state_size)
+        rollouts.obs_img[0].copy_(obs['img'])
+        rollouts.obs_robot[0].copy_(obs['robot_state'])
+        rollouts.obs_task[0].copy_(obs['task_state'])
+    else:
+        rollouts = RolloutStorage(args.num_steps, args.num_processes,
+                                  envs.observation_space.shape, envs.action_space,
+                                  actor_critic.recurrent_hidden_state_size)
+        rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=20)
@@ -142,10 +156,18 @@ def train(sysargs):
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step],
-                    rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step])
+                if args.combi_policy:
+                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                        {'img': rollouts.obs_img[step],
+                         'robot_state': rollouts.obs_robot[step],
+                         'task_state': rollouts.obs_task[step]},
+                        rollouts.recurrent_hidden_states[step],
+                        rollouts.masks[step])
+                else:
+                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                        rollouts.obs[step],
+                        rollouts.recurrent_hidden_states[step],
+                        rollouts.masks[step])
 
             data = {'update_step': j,
                     'num_updates': num_updates,
@@ -159,7 +181,7 @@ def train(sysargs):
             obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
 
             # visualize env 0
-            # img = obs.cpu().numpy()[1, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
+            # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
             # cv2.imshow("win", cv2.resize(img, (300, 300)))
             # cv2.waitKey(10)
             # if done[0]:
@@ -189,9 +211,16 @@ def train(sysargs):
                 difficulty -= incr
             difficulty = np.clip(difficulty, 0, 1)
         with torch.no_grad():
-            next_value = actor_critic.get_value(rollouts.obs[-1],
-                                                rollouts.recurrent_hidden_states[-1],
-                                                rollouts.masks[-1]).detach()
+            if args.combi_policy:
+                next_value = actor_critic.get_value({'img': rollouts.obs_img[-1],
+                                                     'robot_state': rollouts.obs_robot[-1],
+                                                     'task_state': rollouts.obs_task[-1]},
+                                                    rollouts.recurrent_hidden_states[-1],
+                                                    rollouts.masks[-1]).detach()
+            else:
+                next_value = actor_critic.get_value(rollouts.obs[-1],
+                                                    rollouts.recurrent_hidden_states[-1],
+                                                    rollouts.masks[-1]).detach()
 
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
 
