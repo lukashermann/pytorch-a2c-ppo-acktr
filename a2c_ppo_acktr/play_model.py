@@ -3,22 +3,41 @@ import os
 import cv2
 import numpy as np
 import torch
-
-from a2c_ppo_acktr.envs import VecPyTorch, make_vec_envs
+from gym.spaces import Dict
+from a2c_ppo_acktr.envs import VecPyTorch, make_vec_envs, TransposeImage, VecNormalize, DictVecNormalize, DummyVecEnv, DictVecPyTorch, DictTransposeImage
 from a2c_ppo_acktr.utils import get_render_func, get_vec_normalize
 
-def build_env():
-    pass
+
+def build_env(env):
+
+    if isinstance(env.observation_space, Dict):
+        env = DictTransposeImage(env)
+        env = DummyVecEnv([lambda: env])
+        env = DictVecNormalize(env)
+        env = DictVecPyTorch(env, 'cpu')
+    else:
+        env = TransposeImage(env)
+        env = DummyVecEnv([lambda: env])
+        env = VecPyTorch(env, 'cpu')
+    return env
 
 
 class Model:
     def __init__(self, env, snapshot, deterministic=True):
-        self.actor_critic, self.ob_rms = torch.load(snapshot)
+        load_data = torch.load(snapshot)
+        if len(load_data) == 3:
+            self.actor_critic, self.ob_robot_rms, self.ob_task_rms = load_data
+        else:
+            self.actor_critic, self.ob_rms = load_data
         self.deterministic = deterministic
-        # vec_norm = get_vec_normalize(env)
-        # if vec_norm is not None:
-        #     vec_norm.eval()
-        #     vec_norm.ob_rms = self.ob_rms
+        vec_norm = get_vec_normalize(env)
+        if vec_norm is not None:
+            vec_norm.eval()
+            if len(load_data) == 3:
+                vec_norm.ob_robot_rms = self.ob_robot_rms
+                vec_norm.ob_task_rms = self.ob_task_rms
+            else:
+                vec_norm.ob_rms = self.ob_rms
         self.recurrent_hidden_states = torch.zeros(1, self.actor_critic.recurrent_hidden_state_size)
         self.masks = torch.zeros(1, 1)
 

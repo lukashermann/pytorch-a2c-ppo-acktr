@@ -241,8 +241,13 @@ def train(sysargs):
             if args.cuda:
                 save_model = copy.deepcopy(actor_critic).cpu()
 
-            save_model = [save_model,
-                          getattr(get_vec_normalize(envs), 'ob_rms', None)]
+            if args.combi_policy:
+                save_model = [save_model,
+                              getattr(get_vec_normalize(envs), 'ob_robot_rms', None),
+                              getattr(get_vec_normalize(envs), 'ob_task_rms', None)]
+            else:
+                save_model = [save_model,
+                              getattr(get_vec_normalize(envs), 'ob_rms', None)]
 
             torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
 
@@ -277,7 +282,11 @@ def train(sysargs):
             vec_norm = get_vec_normalize(eval_envs)
             if vec_norm is not None:
                 vec_norm.eval()
-                vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
+                if args.combi_policy:
+                    vec_norm.ob_robot_rms = get_vec_normalize(envs).ob_robot_rms
+                    vec_norm.ob_task_rms = get_vec_normalize(envs).ob_task_rms
+                else:
+                    vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
 
             eval_episode_rewards = []
 
