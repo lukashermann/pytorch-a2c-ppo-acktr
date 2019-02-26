@@ -5,7 +5,7 @@ import time
 from collections import deque
 import sys
 import cv2
-
+import json
 import gym
 import numpy as np
 import torch
@@ -24,6 +24,18 @@ from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, updat
 from a2c_ppo_acktr.visualize import visdom_plot
 from gym_grasping.envs.grasping_env import GraspingEnv
 from tensorboardX import SummaryWriter
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            if len(obj) == 1:
+                return obj[0]
+            else:
+                return obj.tolist()
+        if isinstance(obj, np.float32):
+            return float(obj)
+        return json.JSONEncoder.default(self, obj)
 
 
 def train(sysargs):
@@ -73,6 +85,8 @@ def train(sysargs):
             file.write(str(arg) + ' ' + str(getattr(args, arg)) + '\n')
 
     log_file = open(os.path.join(args.log_dir, "log.txt"), "wt")
+
+    curriculum_log_file = open(os.path.join(args.log_dir, "curriculum_log.json"), 'w')
 
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
@@ -187,8 +201,7 @@ def train(sysargs):
             # if done[0]:
             #     print(reward)
 
-
-            for info in infos:
+            for i, info in enumerate(infos):
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
                     if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
@@ -199,6 +212,14 @@ def train(sysargs):
                         num_resets += 1
                         reg_episode_rewards.append(info['episode']['r'])
                         eval_reg_episode_rewards.append(info['episode']['r'])
+                if 'episode_info' in info:
+                    info['episode_info']['env'] = i
+                    info['episode_info']['difficulty'] = difficulty
+                    info['episode_info']['reward'] = reward[i].numpy()[0]
+                    info['episode_info']['progress'] = j / num_updates
+                    json.dump(info['episode_info'], curriculum_log_file, cls=NumpyEncoder)
+                    curriculum_log_file.write('\n')
+
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                        for done_ in done])
