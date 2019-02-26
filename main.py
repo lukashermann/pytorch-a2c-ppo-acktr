@@ -212,7 +212,7 @@ def train(sysargs):
                         num_resets += 1
                         reg_episode_rewards.append(info['episode']['r'])
                         eval_reg_episode_rewards.append(info['episode']['r'])
-                if 'episode_info' in info:
+                if 'episode_info' in info.keys():
                     info['episode_info']['env'] = i
                     info['episode_info']['difficulty'] = difficulty
                     info['episode_info']['reward'] = reward[i].numpy()[0]
