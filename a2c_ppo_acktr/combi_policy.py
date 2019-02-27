@@ -12,6 +12,34 @@ class Flatten(nn.Module):
         return x.view(x.size(0), -1)
 
 
+def nature_cnn(init_, input_shape, output_size):
+    return nn.Sequential(
+            init_(nn.Conv2d(input_shape, 32, 8, stride=4)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)),
+            nn.ReLU(),
+            Flatten(),
+            init_(nn.Linear(32 * 7 * 7, output_size)),
+            nn.ReLU()
+    )
+
+
+def cnn_small_filters(init_, input_shape, output_size):
+    return nn.Sequential(
+        init_(nn.Conv2d(input_shape, 32, 3, stride=2)),
+        nn.ReLU(),
+        init_(nn.Conv2d(32, 64, 3, stride=2)),
+        nn.ReLU(),
+        init_(nn.Conv2d(64, 32, 3, stride=2)),
+        nn.ReLU(),
+        Flatten(),
+        init_(nn.Linear(32 * 9 * 9, output_size)),
+        nn.ReLU()
+    )
+
+
 class CombiPolicy(nn.Module):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None, train_asymm=False, share_layers=True):
         super(CombiPolicy, self).__init__()
@@ -19,7 +47,7 @@ class CombiPolicy(nn.Module):
             base_kwargs = {}
         if base is None:
             if train_asymm:
-                base = CNNAsymmCombi
+                base = CNNAsymmCombi2
             else:
                 base = CNNCombi
 
@@ -169,7 +197,7 @@ class NNBase(nn.Module):
 
 
 class CNNAsymmCombi(NNBase):
-    def __init__(self, obs_space, recurrent=False, output_fc_size=128):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture='nature', output_fc_size=128):
         super(CNNAsymmCombi, self).__init__(recurrent, output_fc_size, output_fc_size)
 
         state_fc_size = 64
@@ -183,17 +211,7 @@ class CNNAsymmCombi(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
 
-        self.cnn = nn.Sequential(
-            init_(nn.Conv2d(img_obs_shape, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
-            Flatten(),
-            init_(nn.Linear(32 * 7 * 7, cnn_fc_size)),
-            nn.ReLU()
-        )
+        self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
 
@@ -244,7 +262,7 @@ class CNNAsymmCombi(NNBase):
 
 
 class CNNCombi(NNBase):
-    def __init__(self, obs_space, recurrent=False, output_fc_size=128):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture="nature", output_fc_size=128):
         super(CNNCombi, self).__init__(recurrent, output_fc_size, output_fc_size)
 
         state_fc_size = 64
@@ -257,17 +275,10 @@ class CNNCombi(NNBase):
             lambda x: nn.init.constant_(x, 0),
             nn.init.calculate_gain('relu'))
 
-        self.cnn = nn.Sequential(
-            init_(nn.Conv2d(img_obs_shape, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
-            Flatten(),
-            init_(nn.Linear(32 * 7 * 7, cnn_fc_size)),
-            nn.ReLU()
-        )
+        if cnn_architecture == 'small_filters':
+            self.cnn = cnn_small_filters(init_, img_obs_shape, cnn_fc_size)
+        else:
+            self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
 
@@ -314,6 +325,58 @@ class CNNCombi(NNBase):
         h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
 
         return self.critic_linear(h_critic2), h_actor2, rnn_hxs
+
+
+class CNNAsymmCombi2(NNBase):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture='nature', output_fc_size=128):
+        cnn_fc_size = 512
+        super(CNNAsymmCombi2, self).__init__(recurrent, cnn_fc_size, cnn_fc_size)
+
+        state_fc_size = 64
+        img_obs_shape = obs_space.spaces['img'].shape[0]
+        robot_state_obs_shape = obs_space.spaces['robot_state'].shape[0]
+        task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('relu'))
+
+        self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.critic_state = nn.Sequential(
+            init_(nn.Linear(robot_state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
+        )
+
+        self.critic_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
+        self.critic_linear = init_(nn.Linear(output_fc_size, 1))
+
+        self.train()
+
+    def forward(self, inputs, rnn_hxs, masks):
+        img_input = inputs['img']
+        robot_state_input = inputs['robot_state']
+        task_state_input = inputs['task_state']
+
+        cnn_output = self.cnn(img_input / 255.0)
+
+        h_critic1 = self.critic_state(robot_state_input)
+
+        h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
+
+        return self.critic_linear(h_critic2), cnn_output, rnn_hxs
 
 
 class MLPBase(NNBase):

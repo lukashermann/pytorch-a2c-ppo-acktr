@@ -103,7 +103,8 @@ def train(sysargs):
 
     if args.combi_policy:
         actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
-                                   base_kwargs={'recurrent': args.recurrent_policy},
+                                   base_kwargs={'recurrent': args.recurrent_policy,
+                                                'cnn_architecture': args.cnn_architecture},
                                    train_asymm=args.train_asymm,
                                    share_layers=False)
     else:
