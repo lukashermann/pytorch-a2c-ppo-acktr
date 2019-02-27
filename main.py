@@ -219,6 +219,7 @@ def train(sysargs):
                     info['episode_info']['progress'] = j / num_updates
                     json.dump(info['episode_info'], curriculum_log_file, cls=NumpyEncoder)
                     curriculum_log_file.write('\n')
+                    curriculum_log_file.flush()
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
