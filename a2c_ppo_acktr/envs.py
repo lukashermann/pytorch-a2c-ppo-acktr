@@ -68,6 +68,7 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
 
     return _thunk
 
+
 def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
                   device, allow_early_resets, num_frame_stack=None):
     envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets)
@@ -94,11 +95,11 @@ def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
     else:
         envs = VecPyTorch(envs, device)
 
-    if num_frame_stack is not None:
-        envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
-    # elif len(envs.observation_space.shape) == 3:
-    #     envs = VecPyTorchFrameStack(envs, 4, device)
-
+    if num_frame_stack > 1:
+        if isinstance(envs.observation_space, Dict):
+            envs = DictVecPyTorchFrameStack(envs, num_frame_stack, device)
+        else:
+            envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
     return envs
 
 
@@ -316,6 +317,53 @@ class VecPyTorchFrameStack(VecEnvWrapper):
         self.stacked_obs = torch.zeros(self.stacked_obs.shape)
         self.stacked_obs[:, -self.shape_dim0:] = obs
         return self.stacked_obs
+
+    def close(self):
+        self.venv.close()
+
+
+class DictVecPyTorchFrameStack(VecEnvWrapper):
+    def __init__(self, venv, nstack, device=None):
+        self.venv = venv
+        self.nstack = nstack
+
+        wos = venv.observation_space.spaces['img']  # wrapped ob space
+        self.shape_dim0 = wos.shape[0]
+
+        low = np.repeat(wos.low, self.nstack, axis=0)
+        high = np.repeat(wos.high, self.nstack, axis=0)
+        self.device = device
+        if device is None:
+            device = torch.device('cpu')
+        self.stacked_obs = torch.zeros((venv.num_envs,) + low.shape).to(device)
+        observation_space = gym.spaces.Box(
+            low=low, high=high, dtype=venv.observation_space.dtype)
+        venv.observation_space.spaces['img'] = observation_space
+        VecEnvWrapper.__init__(self, venv, observation_space=venv.observation_space)
+
+    def step_wait(self):
+        obs, rews, news, infos = self.venv.step_wait()
+        self.stacked_obs[:, :-self.shape_dim0] = self.stacked_obs[:, self.shape_dim0:]
+        for (i, new) in enumerate(news):
+            if new:
+                self.stacked_obs[i] = 0
+        self.stacked_obs[:, -self.shape_dim0:] = obs['img']
+        obs['img'] = self.stacked_obs
+        return obs, rews, news, infos
+
+    def reset(self):
+        obs = self.venv.reset()
+        self.stacked_obs = torch.zeros(self.stacked_obs.shape).to(self.device)
+        self.stacked_obs[:, -self.shape_dim0:] = obs['img']
+        obs['img'] = self.stacked_obs
+        return obs
+
+    def reset_from_curriculum(self, data):
+        obs = self.venv.reset_from_curriculum(data)
+        self.stacked_obs = torch.zeros(self.stacked_obs.shape)
+        self.stacked_obs[:, -self.shape_dim0:] = obs['img']
+        obs['img'] = self.stacked_obs
+        return obs
 
     def close(self):
         self.venv.close()

@@ -83,6 +83,8 @@ def get_args(sysargs):
                         help='train policy with image and vf with full state')
     parser.add_argument('--cnn-architecture', default='nature',
                         help='which cnn architecture')
+    parser.add_argument('--num-framestack', type=int, default=1,
+                        help='num frame stack')
     # curriculum arguments
     parser.add_argument('--adaptive-curriculum', action='store_true', default=False,
                         help='use an adaptive curriculum')

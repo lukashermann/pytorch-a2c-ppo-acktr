@@ -99,7 +99,7 @@ def train(sysargs):
         win = None
 
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, args.add_timestep, device, False)
+                         args.gamma, args.log_dir, args.add_timestep, device, False, num_frame_stack=args.num_framestack)
 
     if args.combi_policy:
         actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
@@ -199,7 +199,7 @@ def train(sysargs):
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
-            # cv2.imshow("win", cv2.resize(img, (300, 300)))
+            # cv2.imshow("win", cv2.resize(img[:,:,3:6], (300, 300)))
             # cv2.waitKey(10)
             # if done[0]:
             #     print(reward)
@@ -302,7 +302,7 @@ def train(sysargs):
 
             eval_envs = make_vec_envs(
                 args.env_name, args.seed + args.num_processes, args.num_processes,
-                args.gamma, eval_log_dir, args.add_timestep, device, True)
+                args.gamma, eval_log_dir, args.add_timestep, device, True, num_frame_stack=args.num_framestack)
 
             vec_norm = get_vec_normalize(eval_envs)
             if vec_norm is not None:
