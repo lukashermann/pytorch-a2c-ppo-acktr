@@ -22,6 +22,15 @@ def build_env(env):
     return env
 
 
+def render_obs(obs, sleep=1, res=(300, 300)):
+    if isinstance(obs, dict):
+        img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
+    else:
+        img = obs.cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
+    cv2.imshow("win", cv2.resize(img, res))
+    cv2.waitKey(sleep)
+
+
 class Model:
     def __init__(self, env, snapshot, deterministic=True):
         load_data = torch.load(snapshot)

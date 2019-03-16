@@ -79,7 +79,7 @@ def get_args(sysargs):
                         help='port to run the server on (default: 8097)')
     parser.add_argument('--combi-policy', action='store_true', default=False,
                         help='use image and state input together')
-    parser.add_argument('--train-asymm', action='store_true', default=False,
+    parser.add_argument('--network-architecture', default='symm',
                         help='train policy with image and vf with full state')
     parser.add_argument('--cnn-architecture', default='nature',
                         help='which cnn architecture')

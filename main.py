@@ -105,8 +105,7 @@ def train(sysargs):
         actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
                                    base_kwargs={'recurrent': args.recurrent_policy,
                                                 'cnn_architecture': args.cnn_architecture},
-                                   train_asymm=args.train_asymm,
-                                   share_layers=False)
+                                   network_architecture=args.network_architecture, share_layers=False)
     else:
         actor_critic = Policy(envs.observation_space.shape, envs.action_space,
                               base_kwargs={'recurrent': args.recurrent_policy})
@@ -199,7 +198,7 @@ def train(sysargs):
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
-            # cv2.imshow("win", cv2.resize(img[:,:,3:6], (300, 300)))
+            # cv2.imshow("win", cv2.resize(img, (300, 300)))
             # cv2.waitKey(10)
             # if done[0]:
             #     print(reward)

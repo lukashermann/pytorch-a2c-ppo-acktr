@@ -41,15 +41,20 @@ def cnn_small_filters(init_, input_shape, output_size):
 
 
 class CombiPolicy(nn.Module):
-    def __init__(self, obs_space, action_space, base=None, base_kwargs=None, train_asymm=False, share_layers=True):
+    def __init__(self, obs_space, action_space, base=None, base_kwargs=None, network_architecture='symm',
+                 share_layers=True):
         super(CombiPolicy, self).__init__()
         if base_kwargs is None:
             base_kwargs = {}
         if base is None:
-            if train_asymm:
+            if network_architecture == 'asymm_robot':
+                base = CNNAsymmCombi1
+            elif network_architecture == 'asymm_robot_task':
                 base = CNNAsymmCombi2
-            else:
+            elif network_architecture == 'symm':
                 base = CNNCombi
+            else:
+                raise ValueError
 
         self.base = base(obs_space, **base_kwargs)
 
@@ -327,10 +332,10 @@ class CNNCombi(NNBase):
         return self.critic_linear(h_critic2), h_actor2, rnn_hxs
 
 
-class CNNAsymmCombi2(NNBase):
+class CNNAsymmCombi1(NNBase):
     def __init__(self, obs_space, recurrent=False, cnn_architecture='nature', output_fc_size=128):
         cnn_fc_size = 512
-        super(CNNAsymmCombi2, self).__init__(recurrent, cnn_fc_size, cnn_fc_size)
+        super(CNNAsymmCombi1, self).__init__(recurrent, cnn_fc_size, cnn_fc_size)
 
         state_fc_size = 64
         img_obs_shape = obs_space.spaces['img'].shape[0]
@@ -373,6 +378,58 @@ class CNNAsymmCombi2(NNBase):
         cnn_output = self.cnn(img_input / 255.0)
 
         h_critic1 = self.critic_state(robot_state_input)
+
+        h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
+
+        return self.critic_linear(h_critic2), cnn_output, rnn_hxs
+
+
+class CNNAsymmCombi2(NNBase):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture='nature', output_fc_size=128):
+        cnn_fc_size = 512
+        super(CNNAsymmCombi2, self).__init__(recurrent, cnn_fc_size, cnn_fc_size)
+
+        state_fc_size = 64
+        img_obs_shape = obs_space.spaces['img'].shape[0]
+        robot_state_obs_shape = obs_space.spaces['robot_state'].shape[0]
+        task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('relu'))
+
+        self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.critic_state = nn.Sequential(
+            init_(nn.Linear(robot_state_obs_shape + task_state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
+        )
+
+        self.critic_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
+        self.critic_linear = init_(nn.Linear(output_fc_size, 1))
+
+        self.train()
+
+    def forward(self, inputs, rnn_hxs, masks):
+        img_input = inputs['img']
+        robot_state_input = inputs['robot_state']
+        task_state_input = inputs['task_state']
+
+        cnn_output = self.cnn(img_input / 255.0)
+
+        h_critic1 = self.critic_state(torch.cat((robot_state_input, task_state_input), 1))
 
         h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
 
