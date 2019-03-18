@@ -41,7 +41,7 @@ def get_args(sysargs):
                         help='ppo clip parameter (default: 0.2)')
     parser.add_argument('--log-interval', type=int, default=10,
                         help='log interval, one log per n updates (default: 10)')
-    parser.add_argument('--save-interval', type=int, default=100,
+    parser.add_argument('--save-interval', type=int, default=300,
                         help='save interval, one save per n updates (default: 100)')
     parser.add_argument('--eval-interval', type=int, default=None,
                         help='eval interval, one eval per n updates (default: None)')

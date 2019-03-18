@@ -21,7 +21,7 @@ class Policy(nn.Module):
             if len(obs_shape) == 3:
                 if len(obs_shape) == 3:
                     if share_layers:
-                        base = CNNShared
+                        base = CNNBase
                     else:
                         base = CNNSeparate
             elif len(obs_shape) == 1:
@@ -174,9 +174,9 @@ class NNBase(nn.Module):
         return x, hxs
 
 
-class CNNShared(NNBase):
+class CNNBase(NNBase):
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
-        super(CNNShared, self).__init__(recurrent, hidden_size, hidden_size)
+        super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
 
         init_ = lambda m: init(m,
             nn.init.orthogonal_,

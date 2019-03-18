@@ -273,7 +273,7 @@ def train(sysargs):
                 save_model = [save_model,
                               getattr(get_vec_normalize(envs), 'ob_rms', None)]
 
-            torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
+            torch.save(save_model, os.path.join(save_path, args.env_name + "_" + str(j) + ".pt"))
 
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
 
