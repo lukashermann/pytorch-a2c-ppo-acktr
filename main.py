@@ -144,7 +144,8 @@ def train(sysargs):
     curr_episode_rewards = deque(maxlen=20)
     reg_episode_rewards = deque(maxlen=20)
     eval_reg_episode_rewards = deque(maxlen=32)
-    difficulty = 0
+    difficulty_cur = 0
+    difficulty_reg = 0
     desired_rew_region = args.desired_rew_region
     incr = args.incr
     eval_episode_rewards = []
@@ -192,7 +193,8 @@ def train(sysargs):
                     'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
                     'reg_eprewmean': np.mean(reg_episode_rewards) if len(reg_episode_rewards) > 1 else 0,
                     'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(eval_reg_episode_rewards) > 1 else 0,
-                    'difficulty': difficulty}
+                    'difficulty_cur': difficulty_cur,
+                    'difficulty_reg': difficulty_reg}
             # Obser reward and next obs
             obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
 
@@ -216,7 +218,8 @@ def train(sysargs):
                         eval_reg_episode_rewards.append(info['episode']['r'])
                 if 'episode_info' in info.keys():
                     info['episode_info']['env'] = i
-                    info['episode_info']['difficulty'] = difficulty
+                    info['episode_info']['difficulty_cur'] = difficulty_cur
+                    info['episode_info']['difficulty_reg'] = difficulty_reg
                     info['episode_info']['reward'] = reward[i].numpy()[0]
                     info['episode_info']['progress'] = j / num_updates
                     json.dump(info['episode_info'], curriculum_log_file, cls=NumpyEncoder)
@@ -230,10 +233,15 @@ def train(sysargs):
 
         if args.adaptive_curriculum and len(curr_episode_rewards) > 1:
             if np.mean(curr_episode_rewards) > desired_rew_region[1]:
-                difficulty += incr
+                difficulty_cur += incr
             elif np.mean(curr_episode_rewards) < desired_rew_region[0]:
-                difficulty -= incr
-            difficulty = np.clip(difficulty, 0, 1)
+                difficulty_cur -= incr
+            difficulty_cur = np.clip(difficulty_cur, 0, 1)
+            if np.mean(reg_episode_rewards) > desired_rew_region[1]:
+                difficulty_reg += incr
+            elif np.mean(reg_episode_rewards) < desired_rew_region[0]:
+                difficulty_reg -= incr
+            difficulty_reg = np.clip(difficulty_reg, 0, 1)
         with torch.no_grad():
             if args.combi_policy:
                 next_value = actor_critic.get_value({'img': rollouts.obs_img[-1],
@@ -364,7 +372,8 @@ def train(sysargs):
             tb_writer.add_scalar("training_success_rate", np.mean(np.array(episode_rewards) > 0).astype(np.float),
                                  total_num_steps)
             tb_writer.add_scalar("eprewmedian_steps", np.median(episode_rewards), total_num_steps)
-            tb_writer.add_scalar("difficulty", difficulty, total_num_steps)
+            tb_writer.add_scalar("difficulty_cur", difficulty_cur, total_num_steps)
+            tb_writer.add_scalar("difficulty_reg", difficulty_reg, total_num_steps)
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
             tb_writer.add_scalar("action_loss", action_loss, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
