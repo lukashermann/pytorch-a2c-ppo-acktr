@@ -53,6 +53,8 @@ class CombiPolicy(nn.Module):
                 base = CNNAsymmCombi2
             elif network_architecture == 'symm':
                 base = CNNCombi
+            elif network_architecture == 'resnet':
+                base = CNNAsymmCombiResNet
             else:
                 raise ValueError
 
@@ -430,6 +432,90 @@ class CNNAsymmCombi2(NNBase):
         cnn_output = self.cnn(img_input / 255.0)
 
         h_critic1 = self.critic_state(torch.cat((robot_state_input, task_state_input), 1))
+
+        h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
+
+        return self.critic_linear(h_critic2), cnn_output, rnn_hxs
+
+
+class CNNAsymmCombiResNet(NNBase):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture='nature', output_fc_size=128):
+        cnn_fc_size = 512
+        super(CNNAsymmCombiResNet, self).__init__(recurrent, cnn_fc_size, cnn_fc_size)
+
+        state_fc_size = 64
+        img_obs_shape = obs_space.spaces['img'].shape[0]
+        robot_state_obs_shape = obs_space.spaces['robot_state'].shape[0]
+        task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('relu'))
+
+        self.down_sample_1 = nn.Sequential(
+            init_(nn.Conv2d(img_obs_shape, 32, 3)),
+            nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 3, stride=2))
+        )
+        self.res_block_1 = nn.Sequential(
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 64, 3, padding=1)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 64, 3, padding=1))
+        )
+        self.down_sample_2 = nn.Sequential(
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 64, 3, stride=2))
+        )
+        self.res_block_2 = nn.Sequential(
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 64, 3, padding=1)),
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 64, 3, padding=1))
+        )
+        self.down_sample_3 = nn.Sequential(
+            nn.ReLU(),
+            init_(nn.Conv2d(64, 64, 3, stride=2)),
+            nn.ReLU(),
+            Flatten(),
+            init_(nn.Linear(64 * 9 * 9, cnn_fc_size)),
+            nn.ReLU()
+        )
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.critic_state = nn.Sequential(
+            init_(nn.Linear(robot_state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
+        )
+
+        self.critic_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
+        self.critic_linear = init_(nn.Linear(output_fc_size, 1))
+
+        self.train()
+
+    def forward(self, inputs, rnn_hxs, masks):
+        img_input = inputs['img']
+        robot_state_input = inputs['robot_state']
+        task_state_input = inputs['task_state']
+
+        x_skip = self.down_sample_1(img_input / 255.0)
+        x = self.res_block_1(x_skip)
+        x_skip = self.down_sample_2(x + x_skip)
+        x = self.res_block_2(x_skip)
+        cnn_output = self.down_sample_3(x + x_skip)
+
+        h_critic1 = self.critic_state(robot_state_input)
 
         h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
 

@@ -201,7 +201,11 @@ def train(sysargs):
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
             # cv2.imshow("win", cv2.resize(img, (300, 300)))
-            # cv2.waitKey(10)
+            # k = cv2.waitKey(10) % 256
+            # if k == ord('a'):
+            #     difficulty_cur += 0.1
+            #     difficulty_cur = np.clip(difficulty_cur, 0, 1)
+            #     print(difficulty_cur)
             # if done[0]:
             #     print(reward)
 
@@ -209,9 +213,11 @@ def train(sysargs):
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
                     if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
+                        # if i == 0: print("curriculum")
                         num_resets += 1
                         curr_episode_rewards.append(info['episode']['r'])
                     elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
+                        # if i == 0: print("regular")
                         num_regular_resets += 1
                         num_resets += 1
                         reg_episode_rewards.append(info['episode']['r'])
@@ -237,6 +243,7 @@ def train(sysargs):
             elif np.mean(curr_episode_rewards) < desired_rew_region[0]:
                 difficulty_cur -= incr
             difficulty_cur = np.clip(difficulty_cur, 0, 1)
+        if args.adaptive_curriculum and len(reg_episode_rewards) > 1:
             if np.mean(reg_episode_rewards) > desired_rew_region[1]:
                 difficulty_reg += incr
             elif np.mean(reg_episode_rewards) < desired_rew_region[0]:
