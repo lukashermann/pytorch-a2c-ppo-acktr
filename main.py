@@ -318,7 +318,8 @@ def train(sysargs):
 
             eval_envs = make_vec_envs(
                 args.env_name, args.seed + args.num_processes, args.num_processes,
-                args.gamma, eval_log_dir, args.add_timestep, device, True, num_frame_stack=args.num_framestack)
+                args.gamma, eval_log_dir, args.add_timestep, device, True, num_frame_stack=args.num_framestack,
+                dont_normalize_obs=args.dont_normalize_obs)
 
             vec_norm = get_vec_normalize(eval_envs)
             if vec_norm is not None:
