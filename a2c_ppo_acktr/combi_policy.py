@@ -55,6 +55,8 @@ class CombiPolicy(nn.Module):
                 base = CNNCombi
             elif network_architecture == 'resnet':
                 base = CNNAsymmCombiResNet
+            elif network_architecture == 'z-coord':
+                base = CNNCombiZCoord
             else:
                 raise ValueError
 
@@ -301,6 +303,68 @@ class CNNCombi(NNBase):
             nn.Tanh(),
             init_(nn.Linear(state_fc_size, state_fc_size)),
             nn.Tanh()
+        )
+
+        self.actor_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
+
+        self.critic_fuse = nn.Sequential(
+            init_(nn.Linear(state_fc_size + cnn_fc_size, output_fc_size)),
+            nn.Tanh())
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
+        self.critic_linear = init_(nn.Linear(output_fc_size, 1))
+
+        self.train()
+
+    def forward(self, inputs, rnn_hxs, masks):
+        img_input = inputs['img']
+        state_input = inputs['robot_state']
+
+        cnn_output = self.cnn(img_input / 255.0)
+
+        h_actor1 = self.actor_state(state_input)
+        h_critic1 = self.critic_state(state_input)
+
+        h_actor2 = self.actor_fuse(torch.cat((cnn_output, h_actor1), 1))
+        h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
+
+        return self.critic_linear(h_critic2), h_actor2, rnn_hxs
+
+
+class CNNCombiZCoord(NNBase):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture="nature", output_fc_size=256):
+        super(CNNCombiZCoord, self).__init__(recurrent, output_fc_size, output_fc_size)
+
+        state_fc_size = 32
+        cnn_fc_size = 256
+        img_obs_shape = obs_space.spaces['img'].shape[0]
+        state_obs_shape = obs_space.spaces['robot_state'].shape[0]
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            nn.init.calculate_gain('relu'))
+
+        if cnn_architecture == 'small_filters':
+            self.cnn = cnn_small_filters(init_, img_obs_shape, cnn_fc_size)
+        else:
+            self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), np.sqrt(2))
+
+        self.actor_state = nn.Sequential(
+            init_(nn.Linear(state_obs_shape, state_fc_size)),
+            nn.Tanh(),
+        )
+
+        self.critic_state = nn.Sequential(
+            init_(nn.Linear(state_obs_shape, state_fc_size)),
+            nn.Tanh(),
         )
 
         self.actor_fuse = nn.Sequential(

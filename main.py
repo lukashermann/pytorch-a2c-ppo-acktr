@@ -99,7 +99,8 @@ def train(sysargs):
         win = None
 
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, args.add_timestep, device, False, num_frame_stack=args.num_framestack)
+                         args.gamma, args.log_dir, args.add_timestep, device, False,
+                         num_frame_stack=args.num_framestack, dont_normalize_obs=args.dont_normalize_obs)
 
     if args.combi_policy:
         actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
@@ -200,6 +201,7 @@ def train(sysargs):
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
+            # print(obs['robot_state'].cpu().numpy())
             # cv2.imshow("win", cv2.resize(img, (300, 300)))
             # k = cv2.waitKey(10) % 256
             # if k == ord('a'):

@@ -70,7 +70,7 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
 
 
 def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
-                  device, allow_early_resets, num_frame_stack=None):
+                  device, allow_early_resets, num_frame_stack=None, dont_normalize_obs=False):
     envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets)
             for i in range(num_processes)]
 
@@ -78,17 +78,17 @@ def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
         envs = SubprocVecEnv(envs)
     else:
         envs = DummyVecEnv(envs)
-
-    if isinstance(envs.observation_space, Dict):
-        if gamma is None:
-            envs = DictVecNormalize(envs, ret=False)
-        else:
-            envs = DictVecNormalize(envs, gamma=gamma)
-    elif len(envs.observation_space.shape) == 1:
-        if gamma is None:
-            envs = VecNormalize(envs, ret=False)
-        else:
-            envs = VecNormalize(envs, gamma=gamma)
+    if not dont_normalize_obs:
+        if isinstance(envs.observation_space, Dict):
+            if gamma is None:
+                envs = DictVecNormalize(envs, ret=False)
+            else:
+                envs = DictVecNormalize(envs, gamma=gamma)
+        elif len(envs.observation_space.shape) == 1:
+            if gamma is None:
+                envs = VecNormalize(envs, ret=False)
+            else:
+                envs = VecNormalize(envs, gamma=gamma)
 
     if isinstance(envs.observation_space, Dict):
         envs = DictVecPyTorch(envs, device)
