@@ -40,6 +40,22 @@ def cnn_small_filters(init_, input_shape, output_size):
     )
 
 
+def cnn_4_layers(init_, input_shape, output_size):
+    return nn.Sequential(
+        init_(nn.Conv2d(input_shape, 32, 3, stride=2)),
+        nn.ReLU(),
+        init_(nn.Conv2d(32, 32, 3, stride=2)),
+        nn.ReLU(),
+        init_(nn.Conv2d(32, 32, 3, stride=2)),
+        nn.ReLU(),
+        init_(nn.Conv2d(32, 32, 3, stride=1)),
+        nn.ReLU(),
+        Flatten(),
+        init_(nn.Linear(32 * 7 * 7, output_size)),
+        nn.ReLU()
+    )
+
+
 class CombiPolicy(nn.Module):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None, network_architecture='symm',
                  share_layers=True):
@@ -286,6 +302,8 @@ class CNNCombi(NNBase):
 
         if cnn_architecture == 'small_filters':
             self.cnn = cnn_small_filters(init_, img_obs_shape, cnn_fc_size)
+        elif cnn_architecture == '4_layers':
+            self.cnn = cnn_4_layers(init_, img_obs_shape, cnn_fc_size)
         else:
             self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
 

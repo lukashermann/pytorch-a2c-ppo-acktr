@@ -8,12 +8,13 @@ from a2c_ppo_acktr.envs import VecPyTorch, make_vec_envs, TransposeImage, VecNor
 from a2c_ppo_acktr.utils import get_render_func, get_vec_normalize
 
 
-def build_env(env):
+def build_env(env, normalize_obs=True):
 
     if isinstance(env.observation_space, Dict):
         env = DictTransposeImage(env)
         env = DummyVecEnv([lambda: env])
-        env = DictVecNormalize(env)
+        if normalize_obs:
+            env = DictVecNormalize(env)
         env = DictVecPyTorch(env, 'cpu')
     else:
         env = TransposeImage(env)

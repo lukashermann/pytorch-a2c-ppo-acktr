@@ -201,7 +201,7 @@ def train(sysargs):
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
-            # print(obs['robot_state'].cpu().numpy())
+            # # print(obs['robot_state'].cpu().numpy())
             # cv2.imshow("win", cv2.resize(img, (300, 300)))
             # k = cv2.waitKey(10) % 256
             # if k == ord('a'):
