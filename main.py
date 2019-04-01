@@ -145,6 +145,9 @@ def train(sysargs):
     curr_episode_rewards = deque(maxlen=20)
     reg_episode_rewards = deque(maxlen=20)
     eval_reg_episode_rewards = deque(maxlen=32)
+    train_success = deque(maxlen=20)
+    curr_success = deque(maxlen=20)
+    reg_success = deque(maxlen=20)
     difficulty_cur = 0
     difficulty_reg = 0
     desired_rew_region = args.desired_rew_region
@@ -193,6 +196,8 @@ def train(sysargs):
                     'curr_eprewmean': np.mean(curr_episode_rewards) if len(curr_episode_rewards) > 1 else 0,
                     'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
                     'reg_eprewmean': np.mean(reg_episode_rewards) if len(reg_episode_rewards) > 1 else 0,
+                    'curr_success_rate': np.mean(curr_success) if len(curr_success) > 1 else 0,
+                    'reg_success_rate': np.mean(reg_success) if len(reg_success) > 1 else 0,
                     'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(eval_reg_episode_rewards) > 1 else 0,
                     'difficulty_cur': difficulty_cur,
                     'difficulty_reg': difficulty_reg}
@@ -201,7 +206,7 @@ def train(sysargs):
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
-            # # print(obs['robot_state'].cpu().numpy())
+            # print(obs['robot_state'].cpu().numpy()[0])
             # cv2.imshow("win", cv2.resize(img, (300, 300)))
             # k = cv2.waitKey(10) % 256
             # if k == ord('a'):
@@ -214,16 +219,19 @@ def train(sysargs):
             for i, info in enumerate(infos):
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
+                    train_success.append(float(info['task_success']))
                     if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
                         # if i == 0: print("curriculum")
                         num_resets += 1
                         curr_episode_rewards.append(info['episode']['r'])
+                        curr_success.append(float(info['task_success']))
                     elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
                         # if i == 0: print("regular")
                         num_regular_resets += 1
                         num_resets += 1
                         reg_episode_rewards.append(info['episode']['r'])
                         eval_reg_episode_rewards.append(info['episode']['r'])
+                        reg_success.append(float(info['task_success']))
                 if 'episode_info' in info.keys():
                     info['episode_info']['env'] = i
                     info['episode_info']['difficulty_cur'] = difficulty_cur
@@ -239,16 +247,16 @@ def train(sysargs):
                                        for done_ in done])
             rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
 
-        if args.adaptive_curriculum and len(curr_episode_rewards) > 1:
-            if np.mean(curr_episode_rewards) > desired_rew_region[1]:
+        if args.adaptive_curriculum and len(curr_success) > 1:
+            if np.mean(curr_success) > desired_rew_region[1]:
                 difficulty_cur += incr
-            elif np.mean(curr_episode_rewards) < desired_rew_region[0]:
+            elif np.mean(curr_success) < desired_rew_region[0]:
                 difficulty_cur -= incr
             difficulty_cur = np.clip(difficulty_cur, 0, 1)
-        if args.adaptive_curriculum and len(reg_episode_rewards) > 1:
-            if np.mean(reg_episode_rewards) > desired_rew_region[1]:
+        if args.adaptive_curriculum and len(reg_success) > 1:
+            if np.mean(reg_success) > desired_rew_region[1]:
                 difficulty_reg += incr
-            elif np.mean(reg_episode_rewards) < desired_rew_region[0]:
+            elif np.mean(reg_success) < desired_rew_region[0]:
                 difficulty_reg -= incr
             difficulty_reg = np.clip(difficulty_reg, 0, 1)
         with torch.no_grad():
@@ -356,7 +364,7 @@ def train(sysargs):
             if args.tensorboard:
                 tb_writer.add_scalar("eval_eprewmean_updates", np.mean(eval_episode_rewards), j)
                 tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards), total_num_steps)
-                tb_writer.add_scalar("eval_success_rate", np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
+                tb_writer.add_scalar("eval_success_rate", np.mean(np.array(eval_episode_rewards) > 0).astype(np.float) ,
                                      total_num_steps)
 
             eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(len(eval_episode_rewards),
@@ -379,8 +387,9 @@ def train(sysargs):
         if args.tensorboard and len(episode_rewards) > 1:
             tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), j)
             tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
-            tb_writer.add_scalar("training_success_rate", np.mean(np.array(episode_rewards) > 0).astype(np.float),
-                                 total_num_steps)
+            tb_writer.add_scalar("training_success_rate", np.mean(train_success), total_num_steps)
+            tb_writer.add_scalar("curr_success_rate", np.mean(curr_success), total_num_steps)
+            tb_writer.add_scalar("reg_success_rate", np.mean(reg_success), total_num_steps)
             tb_writer.add_scalar("eprewmedian_steps", np.median(episode_rewards), total_num_steps)
             tb_writer.add_scalar("difficulty_cur", difficulty_cur, total_num_steps)
             tb_writer.add_scalar("difficulty_reg", difficulty_reg, total_num_steps)
