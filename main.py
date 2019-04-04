@@ -20,7 +20,7 @@ from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.storage import RolloutStorage, CombiRolloutStorage
-from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, update_linear_schedule_less
+from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
 from gym_grasping.envs.grasping_env import GraspingEnv
 from tensorboardX import SummaryWriter
@@ -169,6 +169,8 @@ def train(sysargs):
             update_linear_schedule_less(agent.optimizer, j, num_updates, args.lr)
         elif args.use_linear_lr_decay_half and args.algo == "ppo":
             update_linear_schedule_half(agent.optimizer, j, num_updates, args.lr)
+        elif args.use_sr_schedule and args.algo == "ppo":
+            update_sr_schedule(agent.optimizer, np.mean(reg_success) if len(reg_success) > 1 else 0, args.lr)
         if args.algo == 'ppo' and args.use_linear_clip_decay:
             agent.clip_param = args.clip_param * (1 - j / float(num_updates))
         elif args.algo == 'ppo' and args.use_linear_clip_decay_less:

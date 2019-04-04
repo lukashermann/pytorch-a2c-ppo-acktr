@@ -69,6 +69,8 @@ def get_args(sysargs):
                         help='use a linear schedule on the learning rate')
     parser.add_argument('--use-linear-lr-decay-less', action='store_true', default=False,
                         help='use a linear schedule on the learning rate')
+    parser.add_argument('--use-sr-schedule', action='store_true', default=False,
+                        help='use success rate to decrease learning rate')
     parser.add_argument('--use-linear-clip-decay', action='store_true', default=False,
                         help='use a linear schedule on the ppo clipping parameter')
     parser.add_argument('--use-linear-clip-decay-less', action='store_true', default=False,
