@@ -71,8 +71,8 @@ class CombiPolicy(nn.Module):
                 base = CNNCombi
             elif network_architecture == 'resnet':
                 base = CNNAsymmCombiResNet
-            elif network_architecture == 'z-coord':
-                base = CNNCombiZCoord
+            elif network_architecture == 'combi2':
+                base = CNNCombi2
             else:
                 raise ValueError
 
@@ -354,11 +354,11 @@ class CNNCombi(NNBase):
         return self.critic_linear(h_critic2), h_actor2, rnn_hxs
 
 
-class CNNCombiZCoord(NNBase):
+class CNNCombi2(NNBase):
     def __init__(self, obs_space, recurrent=False, cnn_architecture="nature", output_fc_size=256):
-        super(CNNCombiZCoord, self).__init__(recurrent, output_fc_size, output_fc_size)
+        super(CNNCombi2, self).__init__(recurrent, output_fc_size, output_fc_size)
 
-        state_fc_size = 32
+        state_fc_size = 64
         cnn_fc_size = 256
         img_obs_shape = obs_space.spaces['img'].shape[0]
         state_obs_shape = obs_space.spaces['robot_state'].shape[0]
@@ -378,11 +378,15 @@ class CNNCombiZCoord(NNBase):
         self.actor_state = nn.Sequential(
             init_(nn.Linear(state_obs_shape, state_fc_size)),
             nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
         )
 
         self.critic_state = nn.Sequential(
             init_(nn.Linear(state_obs_shape, state_fc_size)),
             nn.Tanh(),
+            init_(nn.Linear(state_fc_size, state_fc_size)),
+            nn.Tanh()
         )
 
         self.actor_fuse = nn.Sequential(
