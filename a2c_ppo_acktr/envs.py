@@ -3,6 +3,7 @@ import os
 import gym
 import numpy as np
 import torch
+from collections import deque
 from gym.spaces.box import Box
 from gym.spaces.dict_space import Dict
 from baselines import bench
@@ -70,7 +71,7 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
 
 
 def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
-                  device, allow_early_resets, num_frame_stack=None, dont_normalize_obs=False):
+                  device, allow_early_resets, curr_args=None, num_frame_stack=None, dont_normalize_obs=False):
     envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets)
             for i in range(num_processes)]
 
@@ -100,6 +101,8 @@ def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
             envs = DictVecPyTorchFrameStack(envs, num_frame_stack, device)
         else:
             envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
+    if curr_args is not None:
+        envs = CurriculumInfoWrapper(envs, **curr_args)
     return envs
 
 
@@ -367,3 +370,88 @@ class DictVecPyTorchFrameStack(VecEnvWrapper):
 
     def close(self):
         self.venv.close()
+
+
+class CurriculumInfoWrapper(VecEnvWrapper):
+    def __init__(self, venv, num_updates, num_update_steps, desired_rew_region, incr):
+        self.venv = venv
+        super(CurriculumInfoWrapper, self).__init__(venv)
+        self.num_updates = num_updates
+        self.num_update_steps = num_update_steps
+        self.step_counter = 0
+        self.update_counter = 0
+        self.difficulty_cur = 0
+        self.difficulty_reg = 0
+        self.curr_episode_rewards = deque(maxlen=20)
+        self.reg_episode_rewards = deque(maxlen=20)
+        self.curr_success = deque(maxlen=20)
+        self.reg_success = deque(maxlen=20)
+        self.desired_rew_region = desired_rew_region
+        self.incr = incr
+
+    def update_difficulties(self):
+        if len(self.curr_success) > 1:
+            if np.mean(self.curr_success) > self.desired_rew_region[1]:
+                self.difficulty_cur += self.incr
+            elif np.mean(self.curr_success) < self.desired_rew_region[0]:
+                self.difficulty_cur -= self.incr
+            self.difficulty_cur = np.clip(self.difficulty_cur, 0, 1)
+        if len(self.reg_success) > 1:
+            if np.mean(self.reg_success) > self.desired_rew_region[1]:
+                self.difficulty_reg += self.incr
+            elif np.mean(self.reg_success) < self.desired_rew_region[0]:
+                self.difficulty_reg -= self.incr
+            self.difficulty_reg = np.clip(self.difficulty_reg, 0, 1)
+
+    def create_data_dict(self):
+        return {'update_step': self.update_counter,
+                'num_updates': self.num_updates,
+                'eprewmean': None,
+                'curr_eprewmean': np.mean(self.curr_episode_rewards) if len(self.curr_episode_rewards) > 1 else 0,
+                'eval_eprewmean': None,
+                'reg_eprewmean': np.mean(self.reg_episode_rewards) if len(self.reg_episode_rewards) > 1 else 0,
+                'curr_success_rate': np.mean(self.curr_success) if len(self.curr_success) > 1 else 0,
+                'reg_success_rate': np.mean(self.reg_success) if len(self.reg_success) > 1 else 0,
+                'eval_reg_eprewmean': None,
+                'difficulty_cur': self.difficulty_cur,
+                'difficulty_reg': self.difficulty_reg}
+
+    def step(self, action):
+        self.step_counter += 1
+        if self.step_counter % self.num_update_steps == 0:
+            self.update_counter += 1
+        self.update_difficulties()
+        data = self.create_data_dict()
+        self.step_async_with_curriculum_reset(action, data)
+        return self.step_wait()
+
+    def step_async(self, actions):
+        self.venv.step_async(actions)
+
+    def step_async_with_curriculum_reset(self, actions, data):
+        self.venv.step_async_with_curriculum_reset(actions, data)
+
+    def step_wait(self):
+        obs, rews, news, infos = self.venv.step_wait()
+        for i, info in enumerate(infos):
+            if 'episode' in info.keys():
+                if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
+                    self.curr_episode_rewards.append(info['episode']['r'])
+                    self.curr_success.append(float(info['task_success']))
+                elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
+                    self.reg_episode_rewards.append(info['episode']['r'])
+                    self.reg_success.append(float(info['task_success']))
+        return obs, rews, news, infos
+
+    def reset(self):
+        obs = self.venv.reset()
+        return obs
+
+    def reset_from_curriculum(self, data):
+        obs = self.venv.reset_from_curriculum(data)
+        return obs
+
+    def close(self):
+        self.venv.close()
+
+

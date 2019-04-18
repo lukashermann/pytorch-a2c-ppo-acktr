@@ -97,9 +97,12 @@ def train(sysargs):
         from visdom import Visdom
         viz = Visdom(port=args.port)
         win = None
-
+    curr_args = {"num_updates": num_updates,
+                 "num_update_steps" : args.num_steps,
+                 "desired_rew_region": args.desired_rew_region,
+                 "incr": args.incr}
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, args.add_timestep, device, False,
+                         args.gamma, args.log_dir, args.add_timestep, device, False, curr_args=curr_args,
                          num_frame_stack=args.num_framestack, dont_normalize_obs=args.dont_normalize_obs)
 
     if args.combi_policy:
@@ -203,12 +206,14 @@ def train(sysargs):
                     'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(eval_reg_episode_rewards) > 1 else 0,
                     'difficulty_cur': difficulty_cur,
                     'difficulty_reg': difficulty_reg}
-            # Obser reward and next obs
-            obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
+
+            # Observe reward and next obs
+            # obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
+            obs, reward, done, infos = envs.step(action)
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
-            # print(obs['robot_state'].cpu().numpy()[0])
+            # # print(obs['robot_state'].cpu().numpy()[0])
             # cv2.imshow("win", cv2.resize(img, (300, 300)))
             # k = cv2.waitKey(10) % 256
             # if k == ord('a'):
