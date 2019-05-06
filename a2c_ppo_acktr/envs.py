@@ -420,7 +420,7 @@ class CurriculumInfoWrapper(VecEnvWrapper):
         self.step_counter += 1
         if self.step_counter % self.num_update_steps == 0:
             self.update_counter += 1
-        self.update_difficulties()
+            self.update_difficulties()
         data = self.create_data_dict()
         self.step_async_with_curriculum_reset(action, data)
         return self.step_wait()
