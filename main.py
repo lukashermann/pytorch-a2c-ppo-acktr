@@ -97,22 +97,29 @@ def train(sysargs):
         from visdom import Visdom
         viz = Visdom(port=args.port)
         win = None
-    curr_args = {"num_updates": num_updates,
-                 "num_update_steps" : args.num_steps,
-                 "desired_rew_region": args.desired_rew_region,
-                 "incr": args.incr}
+    if args.no_curriculum:
+        curr_args = None
+    else:
+        curr_args = {"num_updates": num_updates,
+                     "num_update_steps" : args.num_steps,
+                     "desired_rew_region": args.desired_rew_region,
+                     "incr": args.incr}
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, args.add_timestep, device, False, curr_args=curr_args,
                          num_frame_stack=args.num_framestack, dont_normalize_obs=args.dont_normalize_obs)
 
-    if args.combi_policy:
-        actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
-                                   base_kwargs={'recurrent': args.recurrent_policy,
-                                                'cnn_architecture': args.cnn_architecture},
-                                   network_architecture=args.network_architecture, share_layers=False)
+    if args.snapshot is None:
+        if args.combi_policy:
+            actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
+                                       base_kwargs={'recurrent': args.recurrent_policy,
+                                                    'cnn_architecture': args.cnn_architecture},
+                                       network_architecture=args.network_architecture, share_layers=False)
+        else:
+            actor_critic = Policy(envs.observation_space.shape, envs.action_space,
+                                  base_kwargs={'recurrent': args.recurrent_policy})
     else:
-        actor_critic = Policy(envs.observation_space.shape, envs.action_space,
-                              base_kwargs={'recurrent': args.recurrent_policy})
+        load_data = torch.load(args.snapshot)
+        actor_critic, _, _ = load_data
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -158,6 +165,12 @@ def train(sysargs):
     eval_episode_rewards = []
 
     start = time.time()
+
+    # print(actor_critic.state_dict()['base.cnn.0.weight'])
+    # actor_critic.state_dict()['base.cnn.0.weight'].fill_(1)
+    # print(actor_critic.state_dict()['base.cnn.0.weight'])
+    # exit()
+
     for j in range(num_updates):
         num_regular_resets = 0
         num_resets = 0

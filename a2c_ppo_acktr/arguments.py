@@ -89,7 +89,11 @@ def get_args(sysargs):
                         help='which cnn architecture')
     parser.add_argument('--num-framestack', type=int, default=1,
                         help='num frame stack')
+    parser.add_argument('--snapshot', default=None,
+                        help='snapshot for pretrained policy (default: None)')
     # curriculum arguments
+    parser.add_argument('--no-curriculum', action='store_true', default=False,
+                        help='dont use curriculum')
     parser.add_argument('--adaptive-curriculum', action='store_true', default=False,
                         help='use an adaptive curriculum')
     parser.add_argument('--desired-rew-region', type=tuple, default=(0.4, 0.6),
