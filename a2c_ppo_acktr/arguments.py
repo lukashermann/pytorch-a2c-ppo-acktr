@@ -91,6 +91,8 @@ def get_args(sysargs):
                         help='num frame stack')
     parser.add_argument('--snapshot', default=None,
                         help='snapshot for pretrained policy (default: None)')
+    parser.add_argument('--num-bc-epochs', type=int, default=1000,
+                        help='snapshot for pretrained policy (default: None)')
     # curriculum arguments
     parser.add_argument('--no-curriculum', action='store_true', default=False,
                         help='dont use curriculum')
@@ -100,6 +102,7 @@ def get_args(sysargs):
                         help='the desired range of train rewards')
     parser.add_argument('--incr', type=float, default=0.002,
                         help='the increment (decrement) if train rewards go out of desired region')
+
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

@@ -77,17 +77,17 @@ def pretrain(sysargs):
     args = get_args(sysargs[1:])
     training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     log_dir = os.path.join("/home/kuka/lang/robot/behavior_cloning/", training_name)
-    train_filename = '/home/kuka/lang/robot/gym_grasping/gym_grasping/behavior_cloning/data/bc_10_train.npz'
-    eval_filename = '/home/kuka/lang/robot/gym_grasping/gym_grasping/behavior_cloning/data/bc_10_eval.npz'
+    train_filename = '/home/kuka/lang/robot/gym_grasping/gym_grasping/behavior_cloning/data/bc_100_train.npz'
+    eval_filename = '/home/kuka/lang/robot/gym_grasping/gym_grasping/behavior_cloning/data/bc_100_eval.npz'
     os.makedirs(log_dir)
     tb_writer = SummaryWriter(log_dir=os.path.join(log_dir, "tb"))
     torch.set_num_threads(1)
     np.random.seed(1)
-    num_epochs = 1000
-    lr = 1e-4
-    eps = 1e-5
+    num_epochs = args.num_bc_epochs
+    lr = args.lr
+    eps = args.eps
     minibatch_size = 10
-    save_interval = 100
+    save_interval = args.save_interval
     recurrent_hidden_states = torch.zeros(minibatch_size).to(device)
     masks = torch.ones(minibatch_size).to(device)
 
@@ -132,7 +132,6 @@ def pretrain(sysargs):
             optimizer.step()
             with torch.no_grad():
                 train_loss.append(loss.cpu().numpy())
-
         # eval
         with torch.no_grad():
             eval_img_obs = process_imgs(eval_img_obs_np)
@@ -144,6 +143,10 @@ def pretrain(sysargs):
                 eval_masks,
                 deterministic=True)
             eval_loss = mse(eval_pred_action, eval_actions)
+        tb_writer.add_scalar("eval_loss_step", eval_loss, epoch_idx * batch_size)
+        tb_writer.add_scalar("eval_loss_epoch", eval_loss, epoch_idx)
+        tb_writer.add_scalar("train_loss_step", np.mean(train_loss), epoch_idx * batch_size)
+        tb_writer.add_scalar("train_loss_epoch", np.mean(train_loss), epoch_idx)
         print("iteration: {}, train_loss: {}, eval_loss: {}".format(epoch_idx, np.mean(train_loss), eval_loss))
         if epoch_idx != 0 and epoch_idx % save_interval == 0:
             save_model = [copy.deepcopy(actor_critic).cpu(), None, None]
