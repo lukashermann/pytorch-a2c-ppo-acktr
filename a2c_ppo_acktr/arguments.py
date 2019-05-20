@@ -98,7 +98,9 @@ def get_args(sysargs):
                         help='dont use curriculum')
     parser.add_argument('--adaptive-curriculum', action='store_true', default=False,
                         help='use an adaptive curriculum')
-    parser.add_argument('--desired-rew-region', type=tuple, default=(0.4, 0.6),
+    parser.add_argument('--desired-rew-region-lo', type=float, default=0.4,
+                        help='the desired range of train rewards')
+    parser.add_argument('--desired-rew-region-hi', type=float, default=0.6,
                         help='the desired range of train rewards')
     parser.add_argument('--incr', type=float, default=0.002,
                         help='the increment (decrement) if train rewards go out of desired region')

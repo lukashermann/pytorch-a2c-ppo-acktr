@@ -97,15 +97,15 @@ def train(sysargs):
         from visdom import Visdom
         viz = Visdom(port=args.port)
         win = None
-    if args.no_curriculum:
-        curr_args = None
-    else:
-        curr_args = {"num_updates": num_updates,
-                     "num_update_steps" : args.num_steps,
-                     "desired_rew_region": args.desired_rew_region,
-                     "incr": args.incr}
+    # if args.no_curriculum:
+    #     curr_args = None
+    # else:
+    #     curr_args = {"num_updates": num_updates,
+    #                  "num_update_steps" : args.num_steps,
+    #                  "desired_rew_region": args.desired_rew_region,
+    #                  "incr": args.incr}
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, args.add_timestep, device, False, curr_args=curr_args,
+                         args.gamma, args.log_dir, args.add_timestep, device, False, curr_args=None,
                          num_frame_stack=args.num_framestack, dont_normalize_obs=args.dont_normalize_obs)
 
     if args.snapshot is None:
@@ -160,7 +160,7 @@ def train(sysargs):
     reg_success = deque(maxlen=20)
     difficulty_cur = 0
     difficulty_reg = 0
-    desired_rew_region = args.desired_rew_region
+    desired_rew_region = (args.desired_rew_region_lo, args.desired_rew_region_hi)
     incr = args.incr
     eval_episode_rewards = []
 
@@ -221,8 +221,8 @@ def train(sysargs):
                     'difficulty_reg': difficulty_reg}
 
             # Observe reward and next obs
-            # obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
-            obs, reward, done, infos = envs.step(action)
+            obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
+            # obs, reward, done, infos = envs.step(action)
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
