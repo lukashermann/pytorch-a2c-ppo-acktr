@@ -151,13 +151,13 @@ def train(sysargs):
         rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=20)
-    curr_episode_rewards = deque(maxlen=20)
-    reg_episode_rewards = deque(maxlen=20)
+    episode_rewards = deque(maxlen=args.rew_q_len)
+    curr_episode_rewards = deque(maxlen=args.rew_q_len)
+    reg_episode_rewards = deque(maxlen=args.rew_q_len)
     eval_reg_episode_rewards = deque(maxlen=32)
-    train_success = deque(maxlen=20)
-    curr_success = deque(maxlen=20)
-    reg_success = deque(maxlen=20)
+    train_success = deque(maxlen=args.rew_q_len)
+    curr_success = deque(maxlen=args.rew_q_len)
+    reg_success = deque(maxlen=args.rew_q_len)
     difficulty_cur = 0
     difficulty_reg = 0
     desired_rew_region = (args.desired_rew_region_lo, args.desired_rew_region_hi)
@@ -186,7 +186,7 @@ def train(sysargs):
         elif args.use_linear_lr_decay_half and args.algo == "ppo":
             update_linear_schedule_half(agent.optimizer, j, num_updates, args.lr)
         elif args.use_sr_schedule and args.algo == "ppo":
-            update_sr_schedule(agent.optimizer, np.mean(reg_success) if len(reg_success) > 1 else 0, args.lr)
+            update_sr_schedule(agent.optimizer, np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0, args.lr)
         if args.algo == 'ppo' and args.use_linear_clip_decay:
             agent.clip_param = args.clip_param * (1 - j / float(num_updates))
         elif args.algo == 'ppo' and args.use_linear_clip_decay_less:

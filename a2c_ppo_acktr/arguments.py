@@ -104,6 +104,8 @@ def get_args(sysargs):
                         help='the desired range of train rewards')
     parser.add_argument('--incr', type=float, default=0.002,
                         help='the increment (decrement) if train rewards go out of desired region')
+    parser.add_argument('--rew-q-len', type=int, default=20,
+                        help='length of reward queue')
 
     args = parser.parse_args(sysargs)
 
