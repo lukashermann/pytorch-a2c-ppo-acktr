@@ -221,8 +221,8 @@ def train(sysargs):
                     'difficulty_reg': difficulty_reg}
 
             # Observe reward and next obs
-            obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
-            # obs, reward, done, infos = envs.step(action)
+            # obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
+            obs, reward, done, infos = envs.step(action)
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
