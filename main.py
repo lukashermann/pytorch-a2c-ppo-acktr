@@ -221,9 +221,8 @@ def train(sysargs):
                     'difficulty_reg': difficulty_reg}
 
             # Observe reward and next obs
-            # obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
-            obs, reward, done, infos = envs.step(action)
-
+            obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
+            # obs, reward, done, infos = envs.step(action)
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
             # # print(obs['robot_state'].cpu().numpy()[0])
@@ -342,8 +341,8 @@ def train(sysargs):
         if (args.eval_interval is not None
                 and len(episode_rewards) > 1
                 and j % args.eval_interval == 0):
-            eval_steps = 32 if j < num_updates - 1 else 100
-
+            eval_steps = 1 if j < num_updates - 1 else 100
+            print("evaluate with {} processes".format(args.num_processes))
             eval_envs = make_vec_envs(
                 args.env_name, args.seed + args.num_processes, args.num_processes,
                 args.gamma, eval_log_dir, args.add_timestep, device, True, num_frame_stack=args.num_framestack,
