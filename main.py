@@ -365,6 +365,9 @@ def train(sysargs):
                                                        actor_critic.recurrent_hidden_state_size, device=device)
             eval_masks = torch.zeros(args.num_processes, 1, device=device)
 
+            save_cnt = 0
+            if j % 300 == 0:
+                os.mkdir(os.path.join(eval_log_dir, "iter_{}".format(j)))
             while len(eval_episode_rewards) <= eval_steps:
                 with torch.no_grad():
                     _, action, _, eval_recurrent_hidden_states = actor_critic.act(
@@ -372,6 +375,10 @@ def train(sysargs):
 
                 # Obser reward and next obs
                 obs, reward, done, infos = eval_envs.step(action)
+                if j % 300 == 0 and save_cnt < 150:
+                    img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
+                    cv2.imwrite(os.path.join(eval_log_dir, "iter_{}/img_{}.png".format(j, save_cnt)), img)
+                    save_cnt += 1
 
                 eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                                 for done_ in done])
