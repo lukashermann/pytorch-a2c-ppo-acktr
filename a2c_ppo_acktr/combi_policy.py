@@ -370,6 +370,8 @@ class CNNCombi2(NNBase):
 
         if cnn_architecture == 'small_filters':
             self.cnn = cnn_small_filters(init_, img_obs_shape, cnn_fc_size)
+        elif cnn_architecture == '4_layers':
+            self.cnn = cnn_4_layers(init_, img_obs_shape, cnn_fc_size)
         else:
             self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
 
