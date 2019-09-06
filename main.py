@@ -58,7 +58,7 @@ def train(sysargs):
         torch.backends.cudnn.deterministic = True
 
     # args.root_dir = "/home/kuka/lang/robot/training_logs"
-    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "_" + str(args.seed)
     args.log_dir = os.path.join(args.root_dir, args.training_name)
     args.save_dir = os.path.join(args.log_dir, "save")
     args.tensorboard = True
