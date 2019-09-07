@@ -76,9 +76,9 @@ def process_imgs(img_obs):
 def pretrain(sysargs):
     args = get_args(sysargs[1:])
     training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    log_dir = os.path.join("/home/kuka/lang/robot/behavior_cloning/", training_name)
-    train_filename = '/home/kuka/lang/robot/gym_grasping/gym_grasping/behavior_cloning/data/bc_100_train.npz'
-    eval_filename = '/home/kuka/lang/robot/gym_grasping/gym_grasping/behavior_cloning/data/bc_100_eval.npz'
+    log_dir = os.path.join("/home/hermannl/master_thesis/behavior_cloning/box", training_name)
+    train_filename = '/home/hermannl/master_thesis/git/gym_grasping/gym_grasping/behavior_cloning/data_box/bc_100_train.npz'
+    eval_filename = '/home/hermannl/master_thesis/git/gym_grasping/gym_grasping/behavior_cloning/data_box/bc_100_eval.npz'
     os.makedirs(log_dir)
     tb_writer = SummaryWriter(log_dir=os.path.join(log_dir, "tb"))
     torch.set_num_threads(1)
