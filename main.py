@@ -366,7 +366,7 @@ def train(sysargs):
             eval_masks = torch.zeros(args.num_processes, 1, device=device)
 
             save_cnt = 0
-            if j % 300 == 0:
+            if not args.dont_save_images and j % 300 == 0:
                 os.mkdir(os.path.join(eval_log_dir, "iter_{}".format(j)))
             while len(eval_episode_rewards) <= eval_steps:
                 with torch.no_grad():
@@ -375,7 +375,7 @@ def train(sysargs):
 
                 # Obser reward and next obs
                 obs, reward, done, infos = eval_envs.step(action)
-                if j % 300 == 0 and save_cnt < 150:
+                if not args.dont_save_images and j % 300 == 0 and save_cnt < 150:
                     img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
                     cv2.imwrite(os.path.join(eval_log_dir, "iter_{}/img_{}.png".format(j, save_cnt)), img)
                     save_cnt += 1

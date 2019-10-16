@@ -106,7 +106,8 @@ def get_args(sysargs):
                         help='the increment (decrement) if train rewards go out of desired region')
     parser.add_argument('--rew-q-len', type=int, default=20,
                         help='length of reward queue')
-
+    parser.add_argument('--dont-save-images', action='store_true', default=False,
+                        help='dont save images')
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

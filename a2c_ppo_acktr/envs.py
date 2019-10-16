@@ -58,11 +58,11 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
         # If the input has shape (W,H,3), wrap for PyTorch convolutions
         if isinstance(env.observation_space, Dict):
             obs_shape = env.observation_space.spaces['img'].shape
-            if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
+            if len(obs_shape) == 3 and obs_shape[2] in [1, 3, 5]:
                 env = DictTransposeImage(env)
         else:
             obs_shape = env.observation_space.shape
-            if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
+            if len(obs_shape) == 3 and obs_shape[2] in [1, 3, 5]:
                 env = TransposeImage(env)
 
         return env
