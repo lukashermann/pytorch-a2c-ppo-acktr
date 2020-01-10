@@ -108,6 +108,8 @@ def get_args(sysargs):
                         help='length of reward queue')
     parser.add_argument('--dont-save-images', action='store_true', default=False,
                         help='dont save images')
+    parser.add_argument('--use-augmentation-loss', action='store_true', default=False,
+                        help='Use data augmentation with separate loss during training')
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

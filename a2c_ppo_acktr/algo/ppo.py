@@ -18,7 +18,8 @@ class PPO():
                  lr=None,
                  eps=None,
                  max_grad_norm=None,
-                 use_clipped_value_loss=True):
+                 use_clipped_value_loss=True,
+                 use_augmentation_loss=False):
 
         self.actor_critic = actor_critic
 
@@ -34,7 +35,7 @@ class PPO():
 
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
 
-        self.use_augmentation_loss = True
+        self.use_augmentation_loss = use_augmentation_loss
         self.obs_transformer = get_transformer()
 
     def update(self, rollouts):
