@@ -120,7 +120,8 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
-                action_loss_aug_epoch += action_loss_aug.item()
+                if self.use_augmentation_loss:
+                    action_loss_aug_epoch += action_loss_aug.item()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
