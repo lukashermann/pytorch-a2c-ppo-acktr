@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from collections import deque
 from gym.spaces.box import Box
-from gym.spaces.dict_space import Dict
+from gym.spaces.dict import Dict
 from baselines import bench
 from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 from baselines.common.vec_env import VecEnvWrapper
@@ -25,10 +25,10 @@ try:
 except ImportError:
     pass
 
-try:
-    import pybullet_envs
-except ImportError:
-    pass
+# try:
+#     import pybullet_envs
+# except ImportError:
+#     pass
 
 
 def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):

@@ -20,7 +20,8 @@ from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.storage import RolloutStorage, CombiRolloutStorage
-from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, update_linear_schedule_less, update_sr_schedule
+from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, \
+    update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
 from gym_grasping.envs.grasping_env import GraspingEnv
 from tensorboardX import SummaryWriter
@@ -186,7 +187,8 @@ def train(sysargs):
         elif args.use_linear_lr_decay_half and args.algo == "ppo":
             update_linear_schedule_half(agent.optimizer, j, num_updates, args.lr)
         elif args.use_sr_schedule and args.algo == "ppo":
-            update_sr_schedule(agent.optimizer, np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0, args.lr)
+            update_sr_schedule(agent.optimizer, np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
+                               args.lr)
         if args.algo == 'ppo' and args.use_linear_clip_decay:
             agent.clip_param = args.clip_param * (1 - j / float(num_updates))
         elif args.algo == 'ppo' and args.use_linear_clip_decay_less:
@@ -293,7 +295,7 @@ def train(sysargs):
 
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
 
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, action_loss_aug = agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -391,7 +393,7 @@ def train(sysargs):
             if args.tensorboard:
                 tb_writer.add_scalar("eval_eprewmean_updates", np.mean(eval_episode_rewards), j)
                 tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards), total_num_steps)
-                tb_writer.add_scalar("eval_success_rate", np.mean(np.array(eval_episode_rewards) > 0).astype(np.float) ,
+                tb_writer.add_scalar("eval_success_rate", np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
                                      total_num_steps)
 
             eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(len(eval_episode_rewards),
@@ -422,10 +424,12 @@ def train(sysargs):
             tb_writer.add_scalar("difficulty_reg", difficulty_reg, total_num_steps)
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
             tb_writer.add_scalar("action_loss", action_loss, total_num_steps)
+            tb_writer.add_scalar("action_loss_augmented", action_loss_aug, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
         if args.tensorboard and len(curr_episode_rewards) > 1:
             tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards), total_num_steps)
-            tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets if num_resets > 0 else 0, total_num_steps)
+            tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets if num_resets > 0 else 0,
+                                 total_num_steps)
         if args.tensorboard and len(reg_episode_rewards) > 1:
             tb_writer.add_scalar("reg_eprewmean_steps", np.mean(reg_episode_rewards), total_num_steps)
 
