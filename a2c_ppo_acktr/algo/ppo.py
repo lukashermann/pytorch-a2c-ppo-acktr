@@ -95,8 +95,9 @@ class PPO():
                                 masks_batch,
                                 deterministic=True)
 
-                        action_loss_aug = torch.nn.functional.mse_loss(action_unlab,
-                                                                       action_unlab_aug.detach())
+                        # Detach action_unlab to prevent the gradient flow through the network
+                        action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
+                                                                       action_unlab_aug)
 
                         if self.return_images:
                             images_epoch["obs_aug"].append(obs_batch_aug['img'].cpu())
