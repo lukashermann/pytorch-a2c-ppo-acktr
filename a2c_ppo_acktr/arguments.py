@@ -106,10 +106,16 @@ def get_args(sysargs):
                         help='the increment (decrement) if train rewards go out of desired region')
     parser.add_argument('--rew-q-len', type=int, default=20,
                         help='length of reward queue')
-    parser.add_argument('--dont-save-images', action='store_true', default=False,
-                        help='dont save images')
+    parser.add_argument('--save-eval-images', action='store_true', default=False,
+                        help='Save evaluation images')
+    parser.add_argument('--save-train-images', action='store_true', default=False,
+                        help='Save training images every save_interval steps')
     parser.add_argument('--use-augmentation-loss', action='store_true', default=False,
                         help='Use data augmentation with separate loss during training')
+    parser.add_argument('--augmenter', type=str, default=None,
+                        help='Specifies which transformer is to be used for augmenting the data for'
+                             'calculating the augmentation loss during training. '
+                             'Default: color_transformer')
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

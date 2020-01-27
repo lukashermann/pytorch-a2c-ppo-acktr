@@ -1,10 +1,13 @@
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from gym.wrappers import transform_observation
+from torch.utils.tensorboard import SummaryWriter
 
-from a2c_ppo_acktr.augmentation.transformer import transform_obs_batch, get_transformer
+from a2c_ppo_acktr.augmentation.augmenters import Augmenter
 
 
 class PPO():
@@ -19,7 +22,9 @@ class PPO():
                  eps=None,
                  max_grad_norm=None,
                  use_clipped_value_loss=True,
-                 use_augmentation_loss=False):
+                 augmenter: Augmenter = None,
+                 augmentation_loss_random_prob: float = None,
+                 return_images: bool=False):
 
         self.actor_critic = actor_critic
 
@@ -35,10 +40,12 @@ class PPO():
 
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
 
-        self.use_augmentation_loss = use_augmentation_loss
-        self.obs_transformer = get_transformer()
+        self.augmenter = augmenter
+        self.augmentation_loss_random_prob = augmentation_loss_random_prob
+        self.return_images = return_images
 
     def update(self, rollouts):
+
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
                 advantages.std() + 1e-5)
@@ -47,6 +54,11 @@ class PPO():
         action_loss_epoch = 0
         action_loss_aug_epoch = 0
         dist_entropy_epoch = 0
+
+        # Store images of training step
+        images_epoch = {"obs": []}
+        if self.augmenter:
+            images_epoch["obs_aug"] = []
 
         for e in range(self.ppo_epoch):
             if self.actor_critic.is_recurrent:
@@ -61,30 +73,37 @@ class PPO():
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
                 adv_targ = sample
 
-                if self.use_augmentation_loss:
-                    # obs_batch_aug = utils.augment_obs_batch()
-                    # TODO: Apply transformation to observation
-                    # TODO: Alternative: use domain randomization to transform observations
-                    obs_batch_aug = transform_obs_batch(obs_batch, self.obs_transformer)
+                action_loss_aug = 0
+                if self.augmenter is not None:
+                    # Only calculate augmentation loss sporadically
+                    if not self.augmentation_loss_random_prob or \
+                            self.augmentation_loss_random_prob > random.random():
 
-                    value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
-                        self.actor_critic.act(
-                            obs_batch,
-                            recurrent_hidden_states_batch,
-                            masks_batch,
-                            deterministic=True)
+                        obs_batch_aug = self.augmenter.augment_batch(obs_batch)
 
-                    value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
-                        self.actor_critic.act(
-                            obs_batch_aug,
-                            recurrent_hidden_states_batch,
-                            masks_batch,
-                            deterministic=True)
+                        value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
+                            self.actor_critic.act(
+                                obs_batch,
+                                recurrent_hidden_states_batch,
+                                masks_batch,
+                                deterministic=True)
 
-                    action_loss_aug = torch.nn.functional.mse_loss(action_unlab,
-                                                                   action_unlab_aug)
-                else:
-                    action_loss_aug = 0
+                        value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
+                            self.actor_critic.act(
+                                obs_batch_aug,
+                                recurrent_hidden_states_batch,
+                                masks_batch,
+                                deterministic=True)
+
+                        action_loss_aug = torch.nn.functional.mse_loss(action_unlab,
+                                                                       action_unlab_aug.detach())
+
+                        if self.return_images:
+                            images_epoch["obs_aug"].append(obs_batch_aug['img'].cpu())
+
+                if self.return_images:
+                    images_epoch["obs"].append(obs_batch['img'].cpu())
+
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch,
@@ -96,7 +115,7 @@ class PPO():
                                     1.0 + self.clip_param) * adv_targ
                 action_loss = -torch.min(surr1, surr2).mean()
 
-                if self.use_augmentation_loss:
+                if self.augmenter is not None:
                     action_loss = action_loss + action_loss_aug
 
                 if self.use_clipped_value_loss:
@@ -120,7 +139,7 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
-                if self.use_augmentation_loss:
+                if self.augmenter is not None:
                     action_loss_aug_epoch += action_loss_aug.item()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
@@ -130,4 +149,4 @@ class PPO():
         action_loss_aug_epoch /= num_updates
         dist_entropy_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, action_loss_aug_epoch
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, action_loss_aug_epoch, images_epoch

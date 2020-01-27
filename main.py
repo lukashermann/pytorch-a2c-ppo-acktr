@@ -1,4 +1,5 @@
 import copy
+import functools
 import glob
 import os
 import time
@@ -14,15 +15,21 @@ import torch.nn.functional as F
 import torch.optim as optim
 import datetime
 
+import a2c_ppo_acktr
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
+from a2c_ppo_acktr.augmentation.augmenters import TransformsAugmenter
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.storage import RolloutStorage, CombiRolloutStorage
-from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, \
+from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, \
+    update_linear_schedule_half, \
     update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
+
+import a2c_ppo_acktr.augmentation.utils as augmentation_utils
+
 from gym_grasping.envs.grasping_env import GraspingEnv
 from tensorboardX import SummaryWriter
 
@@ -59,7 +66,8 @@ def train(sysargs):
         torch.backends.cudnn.deterministic = True
 
     # args.root_dir = "/home/kuka/lang/robot/training_logs"
-    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "_" + str(args.seed)
+    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "_" + str(
+        args.seed)
     args.log_dir = os.path.join(args.root_dir, args.training_name)
     args.save_dir = os.path.join(args.log_dir, "save")
     args.tensorboard = True
@@ -107,14 +115,16 @@ def train(sysargs):
     #                  "incr": args.incr}
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, args.add_timestep, device, False, curr_args=None,
-                         num_frame_stack=args.num_framestack, dont_normalize_obs=args.dont_normalize_obs)
+                         num_frame_stack=args.num_framestack,
+                         dont_normalize_obs=args.dont_normalize_obs)
 
     if args.snapshot is None:
         if args.combi_policy:
             actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
                                        base_kwargs={'recurrent': args.recurrent_policy,
                                                     'cnn_architecture': args.cnn_architecture},
-                                       network_architecture=args.network_architecture, share_layers=False)
+                                       network_architecture=args.network_architecture,
+                                       share_layers=False)
         else:
             actor_critic = Policy(envs.observation_space.shape, envs.action_space,
                                   base_kwargs={'recurrent': args.recurrent_policy})
@@ -123,17 +133,26 @@ def train(sysargs):
         actor_critic, _, _ = load_data
     actor_critic.to(device)
 
+    augmenter = None
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
                                max_grad_norm=args.max_grad_norm)
     elif args.algo == 'ppo':
+
+        if args.use_augmentation_loss:
+            assert args.augmenter is not None
+            # TODO: refactor augmenter args to be cli arguments
+            augmenter = augmentation_utils.get_augmenter_by_name(args.augmenter, augmenter_args={"transformer": "color_transformer", "transformer_args": {"hue": 0}})
+
         agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
                          eps=args.eps,
                          max_grad_norm=args.max_grad_norm,
-                         use_augmentation_loss=args.use_augmentation_loss)
+                         augmenter=augmenter,
+                         return_images=args.save_train_images)
+
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, acktr=True)
@@ -188,7 +207,8 @@ def train(sysargs):
         elif args.use_linear_lr_decay_half and args.algo == "ppo":
             update_linear_schedule_half(agent.optimizer, j, num_updates, args.lr)
         elif args.use_sr_schedule and args.algo == "ppo":
-            update_sr_schedule(agent.optimizer, np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
+            update_sr_schedule(agent.optimizer, np.mean(eval_episode_rewards) if len(
+                eval_episode_rewards) > 1 else 0,
                                args.lr)
         if args.algo == 'ppo' and args.use_linear_clip_decay:
             agent.clip_param = args.clip_param * (1 - j / float(num_updates))
@@ -214,12 +234,16 @@ def train(sysargs):
             data = {'update_step': j,
                     'num_updates': num_updates,
                     'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None,
-                    'curr_eprewmean': np.mean(curr_episode_rewards) if len(curr_episode_rewards) > 1 else 0,
-                    'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
-                    'reg_eprewmean': np.mean(reg_episode_rewards) if len(reg_episode_rewards) > 1 else 0,
+                    'curr_eprewmean': np.mean(curr_episode_rewards) if len(
+                        curr_episode_rewards) > 1 else 0,
+                    'eval_eprewmean': np.mean(eval_episode_rewards) if len(
+                        eval_episode_rewards) > 1 else 0,
+                    'reg_eprewmean': np.mean(reg_episode_rewards) if len(
+                        reg_episode_rewards) > 1 else 0,
                     'curr_success_rate': np.mean(curr_success) if len(curr_success) > 1 else 0,
                     'reg_success_rate': np.mean(reg_success) if len(reg_success) > 1 else 0,
-                    'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(eval_reg_episode_rewards) > 1 else 0,
+                    'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(
+                        eval_reg_episode_rewards) > 1 else 0,
                     'difficulty_cur': difficulty_cur,
                     'difficulty_reg': difficulty_reg}
 
@@ -268,7 +292,8 @@ def train(sysargs):
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                        for done_ in done])
-            rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
+            rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward,
+                            masks)
 
         if args.adaptive_curriculum and len(curr_success) > 1:
             if np.mean(curr_success) > desired_rew_region[1]:
@@ -294,10 +319,10 @@ def train(sysargs):
                                                     rollouts.recurrent_hidden_states[-1],
                                                     rollouts.masks[-1]).detach()
 
+        # Update agent
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
-
-        value_loss, action_loss, dist_entropy, action_loss_aug = agent.update(rollouts)
-
+        value_loss, action_loss, dist_entropy, action_loss_aug, agent_train_images = agent.update(
+            rollouts)
         rollouts.after_update()
 
         # save for every interval-th episode or for the last epoch
@@ -323,6 +348,13 @@ def train(sysargs):
 
             torch.save(save_model, os.path.join(save_path, args.env_name + "_" + str(j) + ".pt"))
 
+            # Save visualization of last training step
+            if args.save_train_images:
+                images = map(functools.partial(torch.cat, dim=3), zip(*agent_train_images.values()))
+                for image_idx, image in enumerate(images):
+                    # TODO: Change obs range to [0, 1]
+                    tb_writer.add_images("Policy Update {}".format(j), image / 255.0, image_idx)
+
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
@@ -330,12 +362,19 @@ def train(sysargs):
             log_output = "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward " \
                          "{:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(j,
                                                                                 total_num_steps,
-                                                                                int(total_num_steps / (end - start)),
-                                                                                len(episode_rewards),
-                                                                                np.mean(episode_rewards),
-                                                                                np.median(episode_rewards),
-                                                                                np.min(episode_rewards),
-                                                                                np.max(episode_rewards),
+                                                                                int(
+                                                                                    total_num_steps / (
+                                                                                            end - start)),
+                                                                                len(
+                                                                                    episode_rewards),
+                                                                                np.mean(
+                                                                                    episode_rewards),
+                                                                                np.median(
+                                                                                    episode_rewards),
+                                                                                np.min(
+                                                                                    episode_rewards),
+                                                                                np.max(
+                                                                                    episode_rewards),
                                                                                 dist_entropy,
                                                                                 value_loss,
                                                                                 action_loss)
@@ -349,7 +388,8 @@ def train(sysargs):
 
             eval_envs = make_vec_envs(
                 args.env_name, args.seed + args.num_processes * j, args.num_processes,
-                args.gamma, eval_log_dir, args.add_timestep, device, True, num_frame_stack=args.num_framestack,
+                args.gamma, eval_log_dir, args.add_timestep, device, True,
+                num_frame_stack=args.num_framestack,
                 dont_normalize_obs=args.dont_normalize_obs)
 
             vec_norm = get_vec_normalize(eval_envs)
@@ -365,11 +405,12 @@ def train(sysargs):
 
             obs = eval_envs.reset()
             eval_recurrent_hidden_states = torch.zeros(args.num_processes,
-                                                       actor_critic.recurrent_hidden_state_size, device=device)
+                                                       actor_critic.recurrent_hidden_state_size,
+                                                       device=device)
             eval_masks = torch.zeros(args.num_processes, 1, device=device)
 
             save_cnt = 0
-            if not args.dont_save_images and j % 300 == 0:
+            if args.save_eval_images and j % 300 == 0:
                 os.mkdir(os.path.join(eval_log_dir, "iter_{}".format(j)))
             while len(eval_episode_rewards) <= eval_steps:
                 with torch.no_grad():
@@ -378,9 +419,16 @@ def train(sysargs):
 
                 # Obser reward and next obs
                 obs, reward, done, infos = eval_envs.step(action)
-                if not args.dont_save_images and j % 300 == 0 and save_cnt < 150:
-                    img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
-                    cv2.imwrite(os.path.join(eval_log_dir, "iter_{}/img_{}.png".format(j, save_cnt)), img)
+                if args.save_eval_images and j % 300 == 0 and save_cnt < 150:
+                    img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(
+                        np.uint8)
+                    cv2.imwrite(
+                        os.path.join(eval_log_dir, "iter_{}/img_{}.png".format(j, save_cnt)), img)
+
+                    # Tensorboard expects images to be in range [0, 1] for FloatTensor
+                    # TODO: Change obs range to [0, 1]
+                    tb_writer.add_images("eval_" + str(j), obs['img'].cpu() / 255.0, save_cnt,
+                                         dataformats='NCHW')
                     save_cnt += 1
 
                 eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0]
@@ -393,13 +441,16 @@ def train(sysargs):
             eval_envs.close()
             if args.tensorboard:
                 tb_writer.add_scalar("eval_eprewmean_updates", np.mean(eval_episode_rewards), j)
-                tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards), total_num_steps)
-                tb_writer.add_scalar("eval_success_rate", np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
+                tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards),
+                                     total_num_steps)
+                tb_writer.add_scalar("eval_success_rate",
+                                     np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
                                      total_num_steps)
 
-            eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(len(eval_episode_rewards),
-                                                                                              np.mean(
-                                                                                                  eval_episode_rewards))
+            eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(
+                len(eval_episode_rewards),
+                np.mean(
+                    eval_episode_rewards))
             print()
             print(eval_log_output)
             print()
@@ -428,11 +479,14 @@ def train(sysargs):
             tb_writer.add_scalar("action_loss_augmented", action_loss_aug, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
         if args.tensorboard and len(curr_episode_rewards) > 1:
-            tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards), total_num_steps)
-            tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets if num_resets > 0 else 0,
+            tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards),
+                                 total_num_steps)
+            tb_writer.add_scalar("regular_resets_ratio",
+                                 num_regular_resets / num_resets if num_resets > 0 else 0,
                                  total_num_steps)
         if args.tensorboard and len(reg_episode_rewards) > 1:
-            tb_writer.add_scalar("reg_eprewmean_steps", np.mean(reg_episode_rewards), total_num_steps)
+            tb_writer.add_scalar("reg_eprewmean_steps", np.mean(reg_episode_rewards),
+                                 total_num_steps)
 
     if args.tensorboard:
         tb_writer.close()

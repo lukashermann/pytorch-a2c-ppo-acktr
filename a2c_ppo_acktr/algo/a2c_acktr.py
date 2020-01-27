@@ -5,7 +5,7 @@ import torch.optim as optim
 from a2c_ppo_acktr.algo.kfac import KFACOptimizer
 
 
-class A2C_ACKTR():
+class A2C_ACKTR:
     def __init__(self,
                  actor_critic,
                  value_loss_coef,
@@ -76,4 +76,5 @@ class A2C_ACKTR():
 
         self.optimizer.step()
 
-        return value_loss.item(), action_loss.item(), dist_entropy.item()
+        # Last two return vals are action_loss_aug and training images from PPO class: not used here.
+        return value_loss.item(), action_loss.item(), dist_entropy.item(), None, None
