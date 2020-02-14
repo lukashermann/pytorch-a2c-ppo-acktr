@@ -114,9 +114,11 @@ def train(sysargs):
     #                  "desired_rew_region": args.desired_rew_region,
     #                  "incr": args.incr}
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, args.add_timestep, device, False, curr_args=None,
+                         args.gamma, args.log_dir, args.add_timestep, device, allow_early_resets=False, curr_args=None,
                          num_frame_stack=args.num_framestack,
-                         dont_normalize_obs=args.dont_normalize_obs)
+                         dont_normalize_obs=args.dont_normalize_obs,
+                         env_params_sampler_dict=args.env_params_file)
+
 
     if args.snapshot is None:
         if args.combi_policy:

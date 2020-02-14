@@ -31,9 +31,9 @@ except ImportError:
 #     pass
 
 
-def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
+def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets, **env_kwargs):
     def _thunk():
-        env = gym.make(env_id)
+        env = gym.make(env_id, **env_kwargs)
 
         env.seed(seed + rank)
 
@@ -71,8 +71,8 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
 
 
 def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
-                  device, allow_early_resets, curr_args=None, num_frame_stack=None, dont_normalize_obs=False):
-    envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets)
+                  device, allow_early_resets, curr_args=None, num_frame_stack=None, dont_normalize_obs=False, **kwargs):
+    envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets, **kwargs)
             for i in range(num_processes)]
 
     if len(envs) > 1:

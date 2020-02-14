@@ -116,6 +116,8 @@ def get_args(sysargs):
                         help='Specifies which transformer is to be used for augmenting the data for'
                              'calculating the augmentation loss during training. '
                              'Default: color_transformer')
+    parser.add_argument('--env-params-file', type=str,
+                        help='Load environment sampler parameters from file')
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
