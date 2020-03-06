@@ -101,9 +101,6 @@ class PPO():
                             return_images=self.return_images)
 
                         if self.return_images:
-                            # TODO: make more generic: for transformsAugmenter:
-                            #   this makes sense as it transforms given obs, but for other
-                            #   transformers it would also make sense to store the original images.
                             images_epoch["obs_aug_orig"].append(aug_obs_batch_orig['img'].cpu())
                             images_epoch["obs_aug_augmented"].append(aug_obs_batch_augmented['img'].cpu())
 
