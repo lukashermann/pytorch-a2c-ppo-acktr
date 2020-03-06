@@ -1,6 +1,7 @@
+import torch
 from torch import Tensor
-from torch.distributions import Transform
 from torch import stack as torch_stack
+from torch.distributions import Transform
 
 import a2c_ppo_acktr.augmentation.utils as transformer_utils
 
@@ -12,20 +13,61 @@ class Augmenter(object):
     def augment_image(self, image, **kwargs):
         pass
 
+    def calculate_loss(self, **kwargs):
+        pass
+
 
 class TransformsAugmenter(Augmenter):
-
     def __init__(self, transformer, **kwargs):
-        """
-        """
+
         assert transformer is not None
 
         transformer_args = kwargs["transformer_args"] if "transformer_args" in kwargs else None
 
         if type(transformer) == str:
-            self.transformer = transformer_utils.get_transformer_by_name(transformer, **transformer_args)
+            self.transformer = transformer_utils.get_transformer_by_name(transformer,
+                                                                         **transformer_args)
         else:
             self.transformer = transformer
+
+    def _calculate_augmentation_loss(self, obs_batch, obs_batch_aug, **kwargs):
+
+        assert "actor_critic" in kwargs
+        assert "recurrent_hidden_states_batch" in kwargs
+        assert "masks_batch" in kwargs
+
+        # Unpack
+        actor_critic, \
+        recurrent_hidden_states_batch, masks_batch = kwargs['actor_critic'], \
+                                                     kwargs["recurrent_hidden_states_batch"], \
+                                                     kwargs["masks_batch"]
+
+
+        value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
+            actor_critic.act(
+                obs_batch,
+                recurrent_hidden_states_batch,
+                masks_batch,
+                deterministic=True)
+
+        value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
+            actor_critic.act(
+                obs_batch_aug,
+                recurrent_hidden_states_batch,
+                masks_batch,
+                deterministic=True)
+
+        # Detach action_unlab to prevent the gradient flow through the network
+        action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
+                                                       action_unlab_aug)
+        return action_loss_aug, obs_batch_aug
+
+
+class TransformsBatchAugmenter(TransformsAugmenter):
+
+    def calculate_loss(self, obs_batch, **kwargs):
+        obs_batch_aug = self.augment_batch(obs_batch)
+        return self._calculate_augmentation_loss(obs_batch, obs_batch_aug, **kwargs)
 
     def augment_batch(self, batch, **kwargs):
         """
@@ -64,7 +106,7 @@ class TransformsAugmenter(Augmenter):
         :return:
         """
         # Retrieve original device
-        device = obs[img_key].get_device()
+        device = obs[img_key].device
 
         # Create a detached copy of original observations
         obs_aug = {

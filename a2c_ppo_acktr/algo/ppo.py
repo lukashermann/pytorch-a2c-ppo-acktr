@@ -2,10 +2,8 @@ import random
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from gym.wrappers import transform_observation
-from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from a2c_ppo_acktr.augmentation.augmenters import Augmenter
 
@@ -24,7 +22,8 @@ class PPO():
                  use_clipped_value_loss=True,
                  augmenter: Augmenter = None,
                  augmentation_loss_random_prob: float = None,
-                 return_images: bool=False):
+                 return_images: bool = False,
+                 augmentation_data_loader=None):
 
         self.actor_critic = actor_critic
 
@@ -41,6 +40,7 @@ class PPO():
         self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
 
         self.augmenter = augmenter
+        self.augmemtation_data_loader = augmentation_data_loader
         self.augmentation_loss_random_prob = augmentation_loss_random_prob
         self.return_images = return_images
 
@@ -58,15 +58,20 @@ class PPO():
         # Store images of training step
         images_epoch = {"obs": []}
         if self.augmenter:
-            images_epoch["obs_aug"] = []
+            images_epoch["obs_aug_orig"] = []
+            images_epoch["obs_aug_augmented"] = []
 
-        for e in range(self.ppo_epoch):
+        for e in tqdm(range(self.ppo_epoch), desc="PPO Epochs"):
             if self.actor_critic.is_recurrent:
                 data_generator = rollouts.recurrent_generator(
                     advantages, self.num_mini_batch)
             else:
                 data_generator = rollouts.feed_forward_generator(
                     advantages, self.num_mini_batch)
+
+            # Relaod data loader iterator
+            if self.augmenter is not None and self.augmemtation_data_loader is not None:
+                augmentation_data_loader_iter = iter(self.augmemtation_data_loader)
 
             for sample in data_generator:
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \
@@ -75,32 +80,32 @@ class PPO():
 
                 action_loss_aug = 0
                 if self.augmenter is not None:
+                    if self.augmemtation_data_loader is not None:
+                        aug_obs_batch_orig = next(augmentation_data_loader_iter)
+
+                        # Move data to model's device
+                        device = obs_batch["img"].device
+                        aug_obs_batch_orig = {k: v.to(device) for k, v in
+                                                  aug_obs_batch_orig.items()}
+                    else:
+                        aug_obs_batch_orig = obs_batch
                     # Only calculate augmentation loss sporadically
                     if not self.augmentation_loss_random_prob or \
                             self.augmentation_loss_random_prob > random.random():
 
-                        obs_batch_aug = self.augmenter.augment_batch(obs_batch)
-
-                        value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
-                            self.actor_critic.act(
-                                obs_batch,
-                                recurrent_hidden_states_batch,
-                                masks_batch,
-                                deterministic=True)
-
-                        value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
-                            self.actor_critic.act(
-                                obs_batch_aug,
-                                recurrent_hidden_states_batch,
-                                masks_batch,
-                                deterministic=True)
-
-                        # Detach action_unlab to prevent the gradient flow through the network
-                        action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
-                                                                       action_unlab_aug)
+                        action_loss_aug, aug_obs_batch_augmented = self.augmenter.calculate_loss(
+                            actor_critic=self.actor_critic,
+                            obs_batch=aug_obs_batch_orig,
+                            recurrent_hidden_states_batch=recurrent_hidden_states_batch,
+                            masks_batch=masks_batch,
+                            return_images=self.return_images)
 
                         if self.return_images:
-                            images_epoch["obs_aug"].append(obs_batch_aug['img'].cpu())
+                            # TODO: make more generic: for transformsAugmenter:
+                            #   this makes sense as it transforms given obs, but for other
+                            #   transformers it would also make sense to store the original images.
+                            images_epoch["obs_aug_orig"].append(aug_obs_batch_orig['img'].cpu())
+                            images_epoch["obs_aug_augmented"].append(aug_obs_batch_augmented['img'].cpu())
 
                 if self.return_images:
                     images_epoch["obs"].append(obs_batch['img'].cpu())

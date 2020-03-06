@@ -1,37 +1,32 @@
 import copy
+import datetime
 import functools
 import glob
+import json
 import os
+import sys
 import time
 from collections import deque
-import sys
+
 import cv2
-import json
-import gym
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import datetime
+from tensorboardX import SummaryWriter
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-import a2c_ppo_acktr
+import a2c_ppo_acktr.augmentation.utils as augmentation_utils
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
-from a2c_ppo_acktr.augmentation.augmenters import TransformsAugmenter
+from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
-from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.storage import RolloutStorage, CombiRolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, \
     update_linear_schedule_half, \
     update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-
-import a2c_ppo_acktr.augmentation.utils as augmentation_utils
-
-from gym_grasping.envs.grasping_env import GraspingEnv
-from tensorboardX import SummaryWriter
+from augmentation.datasets import ObsDataset
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -66,13 +61,35 @@ def train(sysargs):
         torch.backends.cudnn.deterministic = True
 
     # args.root_dir = "/home/kuka/lang/robot/training_logs"
-    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "_" + str(
-        args.seed)
-    args.log_dir = os.path.join(args.root_dir, args.training_name)
+    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M") + "_seed-{}".format(args.seed)
+    if args.tag is not None:
+        args.log_dir = os.path.join(args.root_dir, args.tag, args.training_name)
+    else:
+        args.log_dir = os.path.join(args.root_dir, args.training_name)
+
     args.save_dir = os.path.join(args.log_dir, "save")
     args.tensorboard = True
     if args.tensorboard:
         tb_writer = SummaryWriter(log_dir=os.path.join(args.log_dir, "tb"))
+        if args.save_train_images or args.save_eval_images:
+            tb_writer_img = SummaryWriter(log_dir=os.path.join(args.log_dir, "tb"), filename_suffix="_img")
+
+###
+    # date = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M") + "_seed-" + str(args.seed)
+    # run_name = date + "_exps-{}".format(num_augmentation_steps) + "_runs-{}".format(
+    #     num_runs_per_experiment) + "_eps-{}".format(num_episodes_per_run) + tag
+    # log_dir = os.path.join(log_base_dir, experiment_name, run_name)
+    #
+    # if use_tensorboard:
+    #     tb_writer = SummaryWriter(log_dir=os.path.join(log_dir, "tb"))
+    #     tb_writer.flush()
+    #
+    #     with open(os.path.join(log_dir, "hyperparams.txt"), "w") as file:
+    #         file.write("python " + " ".join(sys.argv) + "\n")
+    #         for arg in vars(args):
+    #             file.write(str(arg) + ' ' + str(getattr(args, arg)) + '\n')
+
+##
 
     try:
         os.makedirs(args.log_dir)
@@ -142,18 +159,32 @@ def train(sysargs):
                                eps=args.eps, alpha=args.alpha,
                                max_grad_norm=args.max_grad_norm)
     elif args.algo == 'ppo':
-
+        dataset = None
+        dataloader = None
         if args.use_augmentation_loss:
             assert args.augmenter is not None
+
             # TODO: refactor augmenter args to be cli arguments
-            augmenter = augmentation_utils.get_augmenter_by_name(args.augmenter, augmenter_args={"transformer": "color_transformer", "transformer_args": {"hue": 0}})
+            if args.dataset_folder is not None:
+                dataset = ObsDataset(root_folder=args.dataset_folder)
+
+                # Batch size is depending on the rollout for the agent algorithm (defined later)
+                data_loader_batch_size = (args.num_processes * args.num_steps) // args.num_mini_batch
+                dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, shuffle=True, num_workers=0, drop_last=True)
+
+            augmenter = augmentation_utils.get_augmenter_by_name(args.augmenter,
+                                                                 augmenter_args={
+                                                                     "transformer": "color_transformer",
+                                                                     "transformer_args": {
+                                                                         "hue": 0}})
 
         agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
                          eps=args.eps,
                          max_grad_norm=args.max_grad_norm,
                          augmenter=augmenter,
-                         return_images=args.save_train_images)
+                         return_images=args.save_train_images,
+                         augmentation_data_loader=dataloader)
 
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
@@ -194,7 +225,7 @@ def train(sysargs):
     # print(actor_critic.state_dict()['base.cnn.0.weight'])
     # exit()
 
-    for j in range(num_updates):
+    for j in tqdm(range(num_updates), desc="Updates"):
         num_regular_resets = 0
         num_resets = 0
         if args.use_linear_lr_decay:
@@ -217,7 +248,7 @@ def train(sysargs):
         elif args.algo == 'ppo' and args.use_linear_clip_decay_less:
             agent.clip_param = args.clip_param * (1 - j / float(2 * num_updates))
 
-        for step in range(args.num_steps):
+        for step in tqdm(range(args.num_steps), desc="Env steps"):
             # Sample actions
             with torch.no_grad():
                 if args.combi_policy:
@@ -352,10 +383,12 @@ def train(sysargs):
 
             # Save visualization of last training step
             if args.save_train_images:
+                # TODO: Split original and augmentation to seperate plots ("obs vs "obs_aug_orig", "obs_aug_augmented")
                 images = map(functools.partial(torch.cat, dim=3), zip(*agent_train_images.values()))
                 for image_idx, image in enumerate(images):
                     # TODO: Change obs range to [0, 1]
-                    tb_writer.add_images("Policy Update {}".format(j), image / 255.0, image_idx)
+                    # TODO: Use separate writer for images, so we can delete image to preserve storage without loosing metric info
+                    tb_writer_img.add_images("Policy Update {}".format(j), image / 255.0, image_idx)
 
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
 
@@ -429,7 +462,7 @@ def train(sysargs):
 
                     # Tensorboard expects images to be in range [0, 1] for FloatTensor
                     # TODO: Change obs range to [0, 1]
-                    tb_writer.add_images("eval_" + str(j), obs['img'].cpu() / 255.0, save_cnt,
+                    tb_writer_img.add_images("eval_" + str(j), obs['img'].cpu() / 255.0, save_cnt,
                                          dataformats='NCHW')
                     save_cnt += 1
 
@@ -492,6 +525,8 @@ def train(sysargs):
 
     if args.tensorboard:
         tb_writer.close()
+        if args.save_eval_images or args.save_train_images:
+            tb_writer_img.close()
 
 
 if __name__ == "__main__":

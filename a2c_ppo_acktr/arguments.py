@@ -118,6 +118,9 @@ def get_args(sysargs):
                              'Default: color_transformer')
     parser.add_argument('--env-params-file', type=str,
                         help='Load environment sampler parameters from file')
+    parser.add_argument('--tag', default=None, help="Tag gets appended to training name")
+    parser.add_argument('--dataset_folder', default=None,
+                        help="Root folder containing dataset data")
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
