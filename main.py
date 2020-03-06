@@ -15,9 +15,10 @@ from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import a2c_ppo_acktr.augmentation.utils as augmentation_utils
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
+from a2c_ppo_acktr.augmentation import augmenters
+from a2c_ppo_acktr.augmentation.datasets import ObsDataset
 from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
@@ -26,7 +27,6 @@ from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, \
     update_linear_schedule_half, \
     update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-from augmentation.datasets import ObsDataset
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -61,7 +61,8 @@ def train(sysargs):
         torch.backends.cudnn.deterministic = True
 
     # args.root_dir = "/home/kuka/lang/robot/training_logs"
-    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M") + "_seed-{}".format(args.seed)
+    args.training_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M") + "_seed-{}".format(
+        args.seed)
     if args.tag is not None:
         args.log_dir = os.path.join(args.root_dir, args.tag, args.training_name)
     else:
@@ -72,9 +73,10 @@ def train(sysargs):
     if args.tensorboard:
         tb_writer = SummaryWriter(log_dir=os.path.join(args.log_dir, "tb"))
         if args.save_train_images or args.save_eval_images:
-            tb_writer_img = SummaryWriter(log_dir=os.path.join(args.log_dir, "tb"), filename_suffix="_img")
+            tb_writer_img = SummaryWriter(log_dir=os.path.join(args.log_dir, "tb"),
+                                          filename_suffix="_img")
 
-###
+    ###
     # date = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M") + "_seed-" + str(args.seed)
     # run_name = date + "_exps-{}".format(num_augmentation_steps) + "_runs-{}".format(
     #     num_runs_per_experiment) + "_eps-{}".format(num_episodes_per_run) + tag
@@ -89,7 +91,7 @@ def train(sysargs):
     #         for arg in vars(args):
     #             file.write(str(arg) + ' ' + str(getattr(args, arg)) + '\n')
 
-##
+    ##
 
     try:
         os.makedirs(args.log_dir)
@@ -131,11 +133,11 @@ def train(sysargs):
     #                  "desired_rew_region": args.desired_rew_region,
     #                  "incr": args.incr}
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, args.add_timestep, device, allow_early_resets=False, curr_args=None,
+                         args.gamma, args.log_dir, args.add_timestep, device,
+                         allow_early_resets=False, curr_args=None,
                          num_frame_stack=args.num_framestack,
                          dont_normalize_obs=args.dont_normalize_obs,
                          env_params_sampler_dict=args.env_params_file)
-
 
     if args.snapshot is None:
         if args.combi_policy:
@@ -165,18 +167,23 @@ def train(sysargs):
             assert args.augmenter is not None
 
             # TODO: refactor augmenter args to be cli arguments
-            if args.dataset_folder is not None:
-                dataset = ObsDataset(root_folder=args.dataset_folder)
+            if args.augmentation_dataset_folder is not None:
+                dataset = ObsDataset(root_folder=args.augmentation_dataset_folder)
 
                 # Batch size is depending on the rollout for the agent algorithm (defined later)
-                data_loader_batch_size = (args.num_processes * args.num_steps) // args.num_mini_batch
-                dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, shuffle=True, num_workers=0, drop_last=True)
+                if args.augmentation_dataloader_batch_size == 'same':
+                    data_loader_batch_size = (
+                                                         args.num_processes * args.num_steps) // args.num_mini_batch
+                else:
+                    data_loader_batch_size = int(args.augmentation_dataloader_batch_size)
+                dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, shuffle=True,
+                                        num_workers=0, drop_last=True)
 
-            augmenter = augmentation_utils.get_augmenter_by_name(args.augmenter,
-                                                                 augmenter_args={
-                                                                     "transformer": "color_transformer",
-                                                                     "transformer_args": {
-                                                                         "hue": 0}})
+            augmenter = augmenters.get_augmenter_by_name(args.augmenter,
+                                                         augmenter_args={
+                                                             "transformer": "color_transformer",
+                                                             "transformer_args": {
+                                                                 "hue": 0}})
 
         agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
@@ -383,12 +390,18 @@ def train(sysargs):
 
             # Save visualization of last training step
             if args.save_train_images:
-                # TODO: Split original and augmentation to seperate plots ("obs vs "obs_aug_orig", "obs_aug_augmented")
-                images = map(functools.partial(torch.cat, dim=3), zip(*agent_train_images.values()))
+                images = agent_train_images["obs"]
                 for image_idx, image in enumerate(images):
-                    # TODO: Change obs range to [0, 1]
-                    # TODO: Use separate writer for images, so we can delete image to preserve storage without loosing metric info
                     tb_writer_img.add_images("Policy Update {}".format(j), image / 255.0, image_idx)
+
+                if args.use_augmentation_loss:
+                    augmentation_obs_keys = ["obs_aug_orig", "obs_aug_augmented"]
+                    aug_images = map(functools.partial(torch.cat, dim=3), zip(
+                        *[agent_train_images[obs_key] for obs_key in augmentation_obs_keys]))
+                    for image_idx, image in enumerate(aug_images):
+                        # TODO: Change obs range to [0, 1]
+                        tb_writer_img.add_images("Policy Update Augmentation{}".format(j),
+                                                 image / 255.0, image_idx)
 
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
 
@@ -463,7 +476,7 @@ def train(sysargs):
                     # Tensorboard expects images to be in range [0, 1] for FloatTensor
                     # TODO: Change obs range to [0, 1]
                     tb_writer_img.add_images("eval_" + str(j), obs['img'].cpu() / 255.0, save_cnt,
-                                         dataformats='NCHW')
+                                             dataformats='NCHW')
                     save_cnt += 1
 
                 eval_masks = torch.FloatTensor([[0.0] if done_ else [1.0]

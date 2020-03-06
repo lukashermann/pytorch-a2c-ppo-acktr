@@ -119,8 +119,11 @@ def get_args(sysargs):
     parser.add_argument('--env-params-file', type=str,
                         help='Load environment sampler parameters from file')
     parser.add_argument('--tag', default=None, help="Tag gets appended to training name")
-    parser.add_argument('--dataset_folder', default=None,
+    parser.add_argument('--augmentation-dataset-folder', default=None,
                         help="Root folder containing dataset data")
+    parser.add_argument('--augmentation-dataloader-batch-size', default='same',
+                        help="Batch size of dataset dataloader. If set to same, dataloader will"
+                             "use the same batch size as the reinforcement learning policy.")
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
