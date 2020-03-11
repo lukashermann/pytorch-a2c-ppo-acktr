@@ -124,6 +124,9 @@ def get_args(sysargs):
     parser.add_argument('--augmentation-dataloader-batch-size', default='same',
                         help="Batch size of dataset dataloader. If set to same, dataloader will"
                              "use the same batch size as the reinforcement learning policy.")
+    parser.add_argument('--augmentation-loss-weight', default=1.0,
+                        help="Set the factor for weighting the augmentation loss. Range [0.0, 1.0]")
+
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()

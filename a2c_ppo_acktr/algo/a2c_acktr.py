@@ -73,8 +73,7 @@ class A2C_ACKTR:
         if self.acktr == False:
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                      self.max_grad_norm)
-
         self.optimizer.step()
 
-        # Last two return vals are action_loss_aug and training images from PPO class: not used here.
-        return value_loss.item(), action_loss.item(), dist_entropy.item(), None, None
+        # Last return value can be a dict containing additional information, not used here, see PPO
+        return value_loss.item(), action_loss.item(), dist_entropy.item(), {}

@@ -7,26 +7,41 @@ import os
 import sys
 import time
 from collections import deque
+import sys
 
 import cv2
+import json
+import gym
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import datetime
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import a2c_ppo_acktr
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
-from a2c_ppo_acktr.augmentation import augmenters
-from a2c_ppo_acktr.augmentation.datasets import ObsDataset
+from a2c_ppo_acktr.augmentation.augmenters import TransformsAugmenter
 from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
+from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.storage import RolloutStorage, CombiRolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, \
     update_linear_schedule_half, \
     update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
+
+from a2c_ppo_acktr.augmentation import augmenters
+from a2c_ppo_acktr.augmentation.datasets import ObsDataset
+
+from gym_grasping.envs.grasping_env import GraspingEnv
+from tensorboardX import SummaryWriter
+from a2c_ppo_acktr.augmentation.datasets import ObsDataset
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -155,25 +170,27 @@ def train(sysargs):
     actor_critic.to(device)
 
     augmenter = None
+    augmentation_loss_weight = args.augmentation_loss_weight
+
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, lr=args.lr,
                                eps=args.eps, alpha=args.alpha,
                                max_grad_norm=args.max_grad_norm)
     elif args.algo == 'ppo':
-        dataset = None
         dataloader = None
         if args.use_augmentation_loss:
             assert args.augmenter is not None
 
             # TODO: refactor augmenter args to be cli arguments
             if args.augmentation_dataset_folder is not None:
-                dataset = ObsDataset(root_folder=args.augmentation_dataset_folder)
+                dataset = ObsDataset(root_folder=args.augmentation_dataset_folder,
+                                     one_file_per_step=True)
 
                 # Batch size is depending on the rollout for the agent algorithm (defined later)
                 if args.augmentation_dataloader_batch_size == 'same':
                     data_loader_batch_size = (
-                                                         args.num_processes * args.num_steps) // args.num_mini_batch
+                                                     args.num_processes * args.num_steps) // args.num_mini_batch
                 else:
                     data_loader_batch_size = int(args.augmentation_dataloader_batch_size)
                 dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, shuffle=True,
@@ -184,14 +201,14 @@ def train(sysargs):
                                                              "transformer": "color_transformer",
                                                              "transformer_args": {
                                                                  "hue": 0}})
-
         agent = algo.PPO(actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
                          args.value_loss_coef, args.entropy_coef, lr=args.lr,
                          eps=args.eps,
                          max_grad_norm=args.max_grad_norm,
                          augmenter=augmenter,
                          return_images=args.save_train_images,
-                         augmentation_data_loader=dataloader)
+                         augmentation_data_loader=dataloader,
+                         augmentation_loss_weight=augmentation_loss_weight)
 
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
@@ -361,9 +378,16 @@ def train(sysargs):
 
         # Update agent
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
-        value_loss, action_loss, dist_entropy, action_loss_aug, agent_train_images = agent.update(
+        value_loss, action_loss, dist_entropy, additional_data_after_update = agent.update(
             rollouts)
         rollouts.after_update()
+
+        action_loss_original = additional_data_after_update[
+            "action_loss_original"] if "action_loss_original" in additional_data_after_update else None
+        action_loss_aug = additional_data_after_update[
+            "action_loss_aug"] if "action_loss_aug" in additional_data_after_update else None
+        agent_train_images = additional_data_after_update[
+            "images"] if "images" in additional_data_after_update else None
 
         # save for every interval-th episode or for the last epoch
         if (j % args.save_interval == 0 or j == num_updates - 1) and args.save_dir != "":
@@ -389,7 +413,7 @@ def train(sysargs):
             torch.save(save_model, os.path.join(save_path, args.env_name + "_" + str(j) + ".pt"))
 
             # Save visualization of last training step
-            if args.save_train_images:
+            if args.save_train_images and agent_train_images is not None:
                 images = agent_train_images["obs"]
                 for image_idx, image in enumerate(images):
                     tb_writer_img.add_images("Policy Update {}".format(j), image / 255.0, image_idx)
@@ -524,6 +548,7 @@ def train(sysargs):
             tb_writer.add_scalar("difficulty_reg", difficulty_reg, total_num_steps)
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
             tb_writer.add_scalar("action_loss", action_loss, total_num_steps)
+            tb_writer.add_scalar("action_loss_original", action_loss_original, total_num_steps)
             tb_writer.add_scalar("action_loss_augmented", action_loss_aug, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
         if args.tensorboard and len(curr_episode_rewards) > 1:
@@ -535,6 +560,8 @@ def train(sysargs):
         if args.tensorboard and len(reg_episode_rewards) > 1:
             tb_writer.add_scalar("reg_eprewmean_steps", np.mean(reg_episode_rewards),
                                  total_num_steps)
+        if args.tensorboard:
+            tb_writer.flush()
 
     if args.tensorboard:
         tb_writer.close()

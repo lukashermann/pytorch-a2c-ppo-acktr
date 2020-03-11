@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
+from gym.wrappers import transform_observation
 
 from a2c_ppo_acktr.augmentation.augmenters import Augmenter
 
@@ -23,7 +24,8 @@ class PPO():
                  augmenter: Augmenter = None,
                  augmentation_loss_random_prob: float = None,
                  return_images: bool = False,
-                 augmentation_data_loader=None):
+                 augmentation_data_loader=None,
+                 augmentation_loss_weight=1.0):
 
         self.actor_critic = actor_critic
 
@@ -42,6 +44,7 @@ class PPO():
         self.augmenter = augmenter
         self.augmemtation_data_loader = augmentation_data_loader
         self.augmentation_loss_random_prob = augmentation_loss_random_prob
+        self.augmentation_loss_weight = augmentation_loss_weight
         self.return_images = return_images
 
     def update(self, rollouts):
@@ -53,6 +56,7 @@ class PPO():
         value_loss_epoch = 0
         action_loss_epoch = 0
         action_loss_aug_epoch = 0
+        action_loss_original_epoch = 0
         dist_entropy_epoch = 0
 
         # Store images of training step
@@ -86,7 +90,7 @@ class PPO():
                         # Move data to model's device
                         device = obs_batch["img"].device
                         aug_obs_batch_orig = {k: v.to(device) for k, v in
-                                                  aug_obs_batch_orig.items()}
+                                              aug_obs_batch_orig.items()}
                     else:
                         aug_obs_batch_orig = obs_batch
                     # Only calculate augmentation loss sporadically
@@ -119,7 +123,10 @@ class PPO():
                 action_loss = -torch.min(surr1, surr2).mean()
 
                 if self.augmenter is not None:
+                    action_loss_original = action_loss.clone().detach()
                     action_loss = action_loss + action_loss_aug
+                else:
+                    action_loss_original = action_loss
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
@@ -142,6 +149,7 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                action_loss_original_epoch += action_loss_original.item()
                 if self.augmenter is not None:
                     action_loss_aug_epoch += action_loss_aug.item()
 
@@ -150,6 +158,13 @@ class PPO():
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         action_loss_aug_epoch /= num_updates
+        action_loss_original_epoch /= num_updates
         dist_entropy_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, action_loss_aug_epoch, images_epoch
+        additional_data = {
+            "action_loss_aug": action_loss_aug_epoch,
+            "action_loss_original": action_loss_original_epoch,
+            "images": images_epoch
+        }
+
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, additional_data
