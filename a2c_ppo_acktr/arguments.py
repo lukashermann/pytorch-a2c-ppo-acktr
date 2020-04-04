@@ -126,6 +126,8 @@ def get_args(sysargs):
                              "use the same batch size as the reinforcement learning policy.")
     parser.add_argument('--augmentation-loss-weight', default=1.0,
                         help="Set the factor for weighting the augmentation loss. Range [0.0, 1.0]")
+    parser.add_argument('--augmentation-use-cnn-loss', default=False, action="store_true",
+                        help="If set, the augmentation loss is calculated over the CNN output instead of output action")
 
     args = parser.parse_args(sysargs)
 

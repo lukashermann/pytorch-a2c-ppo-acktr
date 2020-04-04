@@ -60,10 +60,12 @@ class TransformsAugmenter(Augmenter):
         transformer_args = kwargs["transformer_args"] if "transformer_args" in kwargs else None
 
         if type(transformer) == str:
-            self.transformer = get_transformer_by_name(transformer,
-                                                                         **transformer_args)
+            self.transformer = get_transformer_by_name(transformer, **transformer_args)
         else:
             self.transformer = transformer
+
+        if "use_cnn_loss" in kwargs:
+            self.use_cnn_loss = kwargs["use_cnn_loss"]
 
     def _calculate_augmentation_loss(self, obs_batch, obs_batch_aug, **kwargs):
 
@@ -77,23 +79,42 @@ class TransformsAugmenter(Augmenter):
                                                      kwargs["recurrent_hidden_states_batch"], \
                                                      kwargs["masks_batch"]
 
+        if self.use_cnn_loss:
+            value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, cnn_loss_unlab = \
+                actor_critic.act(
+                    obs_batch,
+                    recurrent_hidden_states_batch,
+                    masks_batch,
+                    deterministic=True)
 
-        value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
-            actor_critic.act(
-                obs_batch,
-                recurrent_hidden_states_batch,
-                masks_batch,
-                deterministic=True)
+            value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug, cnn_loss_unlab_aug = \
+                actor_critic.act(
+                    obs_batch_aug,
+                    recurrent_hidden_states_batch,
+                    masks_batch,
+                    deterministic=True)
+        else:
+            if self.use_cnn_loss:
+                value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
+                    actor_critic.act(
+                        obs_batch,
+                        recurrent_hidden_states_batch,
+                        masks_batch,
+                        deterministic=True)
 
-        value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
-            actor_critic.act(
-                obs_batch_aug,
-                recurrent_hidden_states_batch,
-                masks_batch,
-                deterministic=True)
+                value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
+                    actor_critic.act(
+                        obs_batch_aug,
+                        recurrent_hidden_states_batch,
+                        masks_batch,
+                        deterministic=True)
 
         # Detach action_unlab to prevent the gradient flow through the network
-        action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
+        if self.use_cnn_loss:
+            action_loss_aug = torch.nn.functional.mse_loss(cnn_loss_unlab.detach(),
+                                                           cnn_loss_unlab_aug)
+        else:
+            action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
                                                        action_unlab_aug)
         return action_loss_aug, obs_batch_aug
 

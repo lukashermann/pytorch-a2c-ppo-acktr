@@ -14,15 +14,15 @@ class Flatten(nn.Module):
 
 def nature_cnn(init_, input_shape, output_size):
     return nn.Sequential(
-            init_(nn.Conv2d(input_shape, 32, 8, stride=4)),
-            nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)),
-            nn.ReLU(),
-            Flatten(),
-            init_(nn.Linear(32 * 7 * 7, output_size)),
-            nn.ReLU()
+        init_(nn.Conv2d(input_shape, 32, 8, stride=4)),
+        nn.ReLU(),
+        init_(nn.Conv2d(32, 64, 4, stride=2)),
+        nn.ReLU(),
+        init_(nn.Conv2d(64, 32, 3, stride=1)),
+        nn.ReLU(),
+        Flatten(),
+        init_(nn.Linear(32 * 7 * 7, output_size)),
+        nn.ReLU()
     )
 
 
@@ -76,6 +76,8 @@ class CombiPolicy(nn.Module):
             else:
                 raise ValueError
 
+        if "return_cnn_output" in base_kwargs:
+            self.return_cnn_output = base_kwargs["return_cnn_output"]
         self.base = base(obs_space, **base_kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
@@ -103,7 +105,10 @@ class CombiPolicy(nn.Module):
         raise NotImplementedError
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+        if self.return_cnn_output:
+            value, actor_features, rnn_hxs, cnn_output = self.base(inputs, rnn_hxs, masks)
+        else:
+            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -114,14 +119,24 @@ class CombiPolicy(nn.Module):
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
+        if self.return_cnn_output:
+            return value, action, action_log_probs, rnn_hxs, cnn_output
+
         return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs, rnn_hxs, masks)
+
+        if self.return_cnn_output:
+            value, _, _, _ = self.base(inputs, rnn_hxs, masks)
+        else:
+            value, _, _ = self.base(inputs, rnn_hxs, masks)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+        if self.return_cnn_output:
+            value, actor_features, rnn_hxs, cnn_output = self.base(inputs, rnn_hxs, masks)
+        else:
+            value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
@@ -179,11 +194,10 @@ class NNBase(nn.Module):
             # Let's figure out which steps in the sequence have a zero for any agent
             # We will always assume t=0 has a zero in it as that makes the logic cleaner
             has_zeros = ((masks[1:] == 0.0) \
-                            .any(dim=-1)
-                            .nonzero()
-                            .squeeze()
-                            .cpu())
-
+                         .any(dim=-1)
+                         .nonzero()
+                         .squeeze()
+                         .cpu())
 
             # +1 to correct the masks[1:]
             if has_zeros.dim() == 0:
@@ -194,7 +208,6 @@ class NNBase(nn.Module):
 
             # add t=0 and t=T to the list
             has_zeros = [0] + has_zeros + [T]
-
 
             hxs = hxs.unsqueeze(0)
             outputs = []
@@ -225,6 +238,7 @@ class CNNAsymmCombi(NNBase):
     def __init__(self, obs_space, recurrent=False, cnn_architecture='nature', output_fc_size=128):
         super(CNNAsymmCombi, self).__init__(recurrent, output_fc_size, output_fc_size)
 
+
         state_fc_size = 64
         cnn_fc_size = 512
         img_obs_shape = obs_space.spaces['img'].shape[0]
@@ -232,9 +246,9 @@ class CNNAsymmCombi(NNBase):
         task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0),
+                               nn.init.calculate_gain('relu'))
 
         self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
 
@@ -263,8 +277,8 @@ class CNNAsymmCombi(NNBase):
             nn.Tanh())
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0))
 
         self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
@@ -287,8 +301,11 @@ class CNNAsymmCombi(NNBase):
 
 
 class CNNCombi(NNBase):
-    def __init__(self, obs_space, recurrent=False, cnn_architecture="nature", output_fc_size=128):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture="nature", output_fc_size=128, return_cnn_output=False):
         super(CNNCombi, self).__init__(recurrent, output_fc_size, output_fc_size)
+
+        # If set to true, in addition to the regular network output, the network will return the cnn output
+        self.return_cnn_output = return_cnn_output
 
         state_fc_size = 64
         cnn_fc_size = 512
@@ -296,9 +313,9 @@ class CNNCombi(NNBase):
         state_obs_shape = obs_space.spaces['robot_state'].shape[0]
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0),
+                               nn.init.calculate_gain('relu'))
 
         if cnn_architecture == 'small_filters':
             self.cnn = cnn_small_filters(init_, img_obs_shape, cnn_fc_size)
@@ -332,8 +349,8 @@ class CNNCombi(NNBase):
             nn.Tanh())
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0))
 
         self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
@@ -351,6 +368,8 @@ class CNNCombi(NNBase):
         h_actor2 = self.actor_fuse(torch.cat((cnn_output, h_actor1), 1))
         h_critic2 = self.critic_fuse(torch.cat((cnn_output, h_critic1), 1))
 
+        if self.return_cnn_output:
+            return self.critic_linear(h_critic2), h_actor2, rnn_hxs, cnn_output
         return self.critic_linear(h_critic2), h_actor2, rnn_hxs
 
 
@@ -364,9 +383,9 @@ class CNNCombi2(NNBase):
         state_obs_shape = obs_space.spaces['robot_state'].shape[0]
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0),
+                               nn.init.calculate_gain('relu'))
 
         if cnn_architecture == 'small_filters':
             self.cnn = cnn_small_filters(init_, img_obs_shape, cnn_fc_size)
@@ -400,8 +419,8 @@ class CNNCombi2(NNBase):
             nn.Tanh())
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0))
 
         self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
@@ -433,9 +452,9 @@ class CNNAsymmCombi1(NNBase):
         task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0),
+                               nn.init.calculate_gain('relu'))
 
         self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
 
@@ -453,8 +472,8 @@ class CNNAsymmCombi1(NNBase):
             nn.Tanh())
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0))
 
         self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
@@ -485,9 +504,9 @@ class CNNAsymmCombi2(NNBase):
         task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0),
+                               nn.init.calculate_gain('relu'))
 
         self.cnn = nature_cnn(init_, img_obs_shape, cnn_fc_size)
 
@@ -505,8 +524,8 @@ class CNNAsymmCombi2(NNBase):
             nn.Tanh())
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0))
 
         self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
@@ -537,9 +556,9 @@ class CNNAsymmCombiResNet(NNBase):
         task_state_obs_shape = obs_space.spaces['task_state'].shape[0]
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain('relu'))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0),
+                               nn.init.calculate_gain('relu'))
 
         self.down_sample_1 = nn.Sequential(
             init_(nn.Conv2d(img_obs_shape, 32, 3)),
@@ -585,8 +604,8 @@ class CNNAsymmCombiResNet(NNBase):
             nn.Tanh())
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0))
 
         self.critic_linear = init_(nn.Linear(output_fc_size, 1))
 
@@ -618,9 +637,9 @@ class MLPBase(NNBase):
             num_inputs = hidden_size
 
         init_ = lambda m: init(m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            np.sqrt(2))
+                               nn.init.orthogonal_,
+                               lambda x: nn.init.constant_(x, 0),
+                               np.sqrt(2))
 
         self.actor = nn.Sequential(
             init_(nn.Linear(num_inputs, hidden_size)),

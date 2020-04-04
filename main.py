@@ -156,9 +156,12 @@ def train(sysargs):
 
     if args.snapshot is None:
         if args.combi_policy:
+            base_kwargs = {'recurrent': args.recurrent_policy,
+                           'cnn_architecture': args.cnn_architecture}
+            if args.augmentation_use_cnn_loss:
+                base_kwargs["return_cnn_output"] = True
             actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
-                                       base_kwargs={'recurrent': args.recurrent_policy,
-                                                    'cnn_architecture': args.cnn_architecture},
+                                       base_kwargs=base_kwargs,
                                        network_architecture=args.network_architecture,
                                        share_layers=False)
         else:
@@ -276,12 +279,15 @@ def train(sysargs):
             # Sample actions
             with torch.no_grad():
                 if args.combi_policy:
-                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        {'img': rollouts.obs_img[step],
+                    act_args = ({'img': rollouts.obs_img[step],
                          'robot_state': rollouts.obs_robot[step],
                          'task_state': rollouts.obs_task[step]},
                         rollouts.recurrent_hidden_states[step],
                         rollouts.masks[step])
+                    if args.augmentation_use_cnn_loss:
+                        value, action, action_log_prob, recurrent_hidden_states, cnn_output = actor_critic.act(*act_args)
+                    else:
+                        value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(*act_args)
                 else:
                     value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                         rollouts.obs[step],
@@ -486,8 +492,12 @@ def train(sysargs):
                 os.mkdir(os.path.join(eval_log_dir, "iter_{}".format(j)))
             while len(eval_episode_rewards) <= eval_steps:
                 with torch.no_grad():
-                    _, action, _, eval_recurrent_hidden_states = actor_critic.act(
-                        obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
+                    if args.augmentation_use_cnn_loss:
+                        _, action, _, eval_recurrent_hidden_states, _ = actor_critic.act(
+                            obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
+                    else:
+                        _, action, _, eval_recurrent_hidden_states = actor_critic.act(
+                            obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
 
                 # Obser reward and next obs
                 obs, reward, done, infos = eval_envs.step(action)
