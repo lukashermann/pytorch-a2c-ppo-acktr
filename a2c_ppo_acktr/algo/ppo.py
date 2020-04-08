@@ -124,7 +124,8 @@ class PPO():
 
                 if self.augmenter is not None:
                     action_loss_original = action_loss.clone().detach()
-                    action_loss = action_loss + action_loss_aug
+                    action_loss_aug_weighted = self.augmentation_loss_weight * action_loss_aug.clone().detach()
+                    action_loss = action_loss + self.augmentation_loss_weight * action_loss_aug
                 else:
                     action_loss_original = action_loss
 
@@ -164,6 +165,7 @@ class PPO():
         additional_data = {
             "action_loss_aug": action_loss_aug_epoch,
             "action_loss_original": action_loss_original_epoch,
+            "action_loss_aug_weighted": action_loss_aug_weighted,
             "images": images_epoch
         }
 

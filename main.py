@@ -392,8 +392,12 @@ def train(sysargs):
             "action_loss_original"] if "action_loss_original" in additional_data_after_update else None
         action_loss_aug = additional_data_after_update[
             "action_loss_aug"] if "action_loss_aug" in additional_data_after_update else None
+        action_loss_aug_weighted = additional_data_after_update[
+            "action_loss_aug_weighted"] if "action_loss_aug_weighted" in additional_data_after_update else None
+
         agent_train_images = additional_data_after_update[
             "images"] if "images" in additional_data_after_update else None
+
 
         # save for every interval-th episode or for the last epoch
         if (j % args.save_interval == 0 or j == num_updates - 1) and args.save_dir != "":
@@ -528,6 +532,7 @@ def train(sysargs):
                 tb_writer.add_scalar("eval_success_rate",
                                      np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
                                      total_num_steps)
+                tb_writer.flush()
 
             eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(
                 len(eval_episode_rewards),
@@ -557,9 +562,10 @@ def train(sysargs):
             tb_writer.add_scalar("difficulty_cur", difficulty_cur, total_num_steps)
             tb_writer.add_scalar("difficulty_reg", difficulty_reg, total_num_steps)
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
-            tb_writer.add_scalar("action_loss", action_loss, total_num_steps)
+            tb_writer.add_scalar("action_loss_sum", action_loss, total_num_steps)
             tb_writer.add_scalar("action_loss_original", action_loss_original, total_num_steps)
             tb_writer.add_scalar("action_loss_augmented", action_loss_aug, total_num_steps)
+            tb_writer.add_scalar("action_loss_augmented_weighted", action_loss_aug_weighted, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
         if args.tensorboard and len(curr_episode_rewards) > 1:
             tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards),
