@@ -40,7 +40,6 @@ def create_color_transformer(brightness=0.5, contrast=0.5, saturation=0.5, hue=0
     ])
 
 
-
 class Augmenter(object):
     def augment_batch(self, batch, **kwargs):
         pass
@@ -80,14 +79,14 @@ class TransformsAugmenter(Augmenter):
                                                      kwargs["masks_batch"]
 
         if self.use_cnn_loss:
-            value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, cnn_loss_unlab = \
+            value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, cnn_output_unlab = \
                 actor_critic.act(
                     obs_batch,
                     recurrent_hidden_states_batch,
                     masks_batch,
                     deterministic=True)
 
-            value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug, cnn_loss_unlab_aug = \
+            value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug, cnn_output_unlab_aug = \
                 actor_critic.act(
                     obs_batch_aug,
                     recurrent_hidden_states_batch,
@@ -111,11 +110,12 @@ class TransformsAugmenter(Augmenter):
 
         # Detach action_unlab to prevent the gradient flow through the network
         if self.use_cnn_loss:
-            action_loss_aug = torch.nn.functional.mse_loss(cnn_loss_unlab.detach(),
-                                                           cnn_loss_unlab_aug)
+            torch.nn.functional.cross_entropy(cnn_output_unlab.detach(),
+                                              cnn_output_unlab_aug)
+            action_loss_aug = torch.nn.functional.mse_loss()
         else:
             action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
-                                                       action_unlab_aug)
+                                                           action_unlab_aug)
         return action_loss_aug, obs_batch_aug
 
 
