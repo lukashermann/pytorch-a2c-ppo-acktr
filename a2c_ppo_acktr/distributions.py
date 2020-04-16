@@ -3,13 +3,24 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import time
 from a2c_ppo_acktr.utils import AddBias, init
-
 """
 Modify standard PyTorch distributions so they are compatible with this code.
 """
-
+def timeit(method):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+        if 'log_time' in kw:
+            name = kw.get('log_name', method.__name__.upper())
+            kw['log_time'][name] = int((te - ts) * 1000)
+        else:
+            print('%r  %2.2f ms' % \
+                  (method.__name__, (te - ts) * 1000))
+        return result
+    return timed
 #
 # Standardize distribution interfaces
 #
@@ -37,6 +48,16 @@ FixedNormal.entropy = lambda self: normal_entropy(self).sum(-1)
 
 FixedNormal.mode = lambda self: self.mean
 
+# Beta
+Beta = torch.distributions.Beta
+
+log_prob_beta = Beta.log_prob
+Beta.log_probs = lambda self, actions: log_prob_beta(self, actions).sum(-1, keepdim=True)
+
+beta_entropy = Beta.entropy
+Beta.entropy = lambda self: beta_entropy(self).sum(-1)
+
+Beta.mode = lambda self: self.mean
 
 # Bernoulli
 FixedBernoulli = torch.distributions.Bernoulli
@@ -73,7 +94,7 @@ class DiagGaussian(nn.Module):
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0))
 
-        self.fc_mean = nn.Sequential(init_(nn.Linear(num_inputs, num_outputs)), nn.Tanh())
+        self.fc_mean = nn.Sequential(init_(nn.Linear(num_inputs, num_outputs)))
         self.logstd = AddBias(torch.zeros(num_outputs))
 
     def forward(self, x):
@@ -86,6 +107,23 @@ class DiagGaussian(nn.Module):
 
         action_logstd = self.logstd(zeros)
         return FixedNormal(action_mean, action_logstd.exp())
+
+
+class BetaLayer(nn.Module):
+    def __init__(self, num_inputs, num_outputs):
+        super(BetaLayer, self).__init__()
+
+        init_ = lambda m: init(m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0))
+
+        self.alpha = nn.Sequential(init_(nn.Linear(num_inputs, num_outputs)), nn.Softplus())
+        self.beta = nn.Sequential(init_(nn.Linear(num_inputs, num_outputs)), nn.Softplus())
+
+    def forward(self, x):
+        alpha = self.alpha(x) + 1
+        beta = self.beta(x) + 1
+        return Beta(alpha, beta)
 
 
 class Bernoulli(nn.Module):

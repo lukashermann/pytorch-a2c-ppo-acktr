@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from a2c_ppo_acktr.distributions import Categorical, DiagGaussian, Bernoulli
+from a2c_ppo_acktr.distributions import Categorical, DiagGaussian, Bernoulli, BetaLayer
 from a2c_ppo_acktr.utils import init
 
 
@@ -83,7 +83,7 @@ class CombiPolicy(nn.Module):
             self.dist = Categorical(self.base.output_size, num_outputs)
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
-            self.dist = DiagGaussian(self.base.output_size, num_outputs)
+            self.dist = BetaLayer(self.base.output_size, num_outputs)
         elif action_space.__class__.__name__ == "MultiBinary":
             num_outputs = action_space.shape[0]
             self.dist = Bernoulli(self.base.output_size, num_outputs)
