@@ -81,12 +81,8 @@ class CombiPolicy(nn.Module):
         if "return_cnn_output" in base_kwargs:
             self.return_cnn_output = base_kwargs["return_cnn_output"]
         else:
-<<<<<<< Updated upstream
-            self.return_cnn_output = None
-=======
             self.return_cnn_output = False
 
->>>>>>> Stashed changes
         self.base = base(obs_space, **base_kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
