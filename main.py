@@ -280,12 +280,13 @@ def train(sysargs):
             with torch.no_grad():
                 if args.combi_policy:
                     act_args = ({'img': rollouts.obs_img[step],
-                         'robot_state': rollouts.obs_robot[step],
-                         'task_state': rollouts.obs_task[step]},
-                        rollouts.recurrent_hidden_states[step],
-                        rollouts.masks[step])
+                                 'robot_state': rollouts.obs_robot[step],
+                                 'task_state': rollouts.obs_task[step]},
+                                rollouts.recurrent_hidden_states[step],
+                                rollouts.masks[step])
                     if args.augmentation_use_cnn_loss:
-                        value, action, action_log_prob, recurrent_hidden_states, cnn_output = actor_critic.act(*act_args)
+                        value, action, action_log_prob, recurrent_hidden_states, cnn_output = actor_critic.act(
+                            *act_args)
                     else:
                         value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(*act_args)
                 else:
@@ -394,10 +395,14 @@ def train(sysargs):
             "action_loss_aug"] if "action_loss_aug" in additional_data_after_update else None
         action_loss_aug_weighted = additional_data_after_update[
             "action_loss_aug_weighted"] if "action_loss_aug_weighted" in additional_data_after_update else None
-        grad_norm = additional_data_after_update["grad_norm"] if "grad_norm" in additional_data_after_update else None
+        grad_norm = additional_data_after_update[
+            "action_max_value_aug"] if "action_max_value_aug" in additional_data_after_update else None
+        action_max_value_aug = additional_data_after_update[
+            "action_max_value_aug"] if "action_max_value_aug" in additional_data_after_update else None
+        action_max_value = additional_data_after_update[
+            "action_max_value"] if "action_max_value" in additional_data_after_update else None
         agent_train_images = additional_data_after_update[
             "images"] if "images" in additional_data_after_update else None
-
 
         # save for every interval-th episode or for the last epoch
         if (j % args.save_interval == 0 or j == num_updates - 1) and args.save_dir != "":
@@ -566,6 +571,8 @@ def train(sysargs):
             tb_writer.add_scalar("action_loss_original", action_loss_original, total_num_steps)
             tb_writer.add_scalar("action_loss_augmented", action_loss_aug, total_num_steps)
             tb_writer.add_scalar("action_loss_augmented_weighted", action_loss_aug_weighted, total_num_steps)
+            tb_writer.add_scalar("action_max_value_aug", action_max_value_aug, total_num_steps)
+            tb_writer.add_scalar("action_max_value", action_max_value, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
             tb_writer.add_scalar("grad_norm", grad_norm, total_num_steps)
 
