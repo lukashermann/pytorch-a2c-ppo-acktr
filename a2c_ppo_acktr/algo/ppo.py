@@ -163,8 +163,10 @@ class PPO():
                     # In order to analyse the action space we report the max action performed in the augmentation step
                     if action_aug_max_value_epoch >= augmenter_loss_data["action_aug_max_value"]:
                         action_aug_max_value_epoch = augmenter_loss_data["action_aug_max_value"]
-                if action_max_value_epoch >= augmenter_loss_data["action_max_value"]:
-                    action_max_value_epoch = augmenter_loss_data["action_max_value"]
+
+                max_actions_batch = torch.max(actions_batch)
+                if action_max_value_epoch >= max_actions_batch:
+                    action_max_value_epoch = max_actions_batch
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
