@@ -396,7 +396,7 @@ def train(sysargs):
         action_loss_aug_weighted = additional_data_after_update[
             "action_loss_aug_weighted"] if "action_loss_aug_weighted" in additional_data_after_update else None
         grad_norm = additional_data_after_update[
-            "action_max_value_aug"] if "action_max_value_aug" in additional_data_after_update else None
+            "total_norm_epoch"] if "total_norm_epoch" in additional_data_after_update else None
         action_max_value_aug = additional_data_after_update[
             "action_max_value_aug"] if "action_max_value_aug" in additional_data_after_update else None
         action_max_value = additional_data_after_update[
