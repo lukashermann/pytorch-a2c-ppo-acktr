@@ -25,7 +25,7 @@ class PPO():
                  augmentation_loss_random_prob: float = None,
                  return_images: bool = False,
                  augmentation_data_loader=None,
-                 augmentation_loss_weight=1.0):
+                 augmentation_loss_weight=0.0):
 
         self.actor_critic = actor_critic
 
@@ -130,6 +130,7 @@ class PPO():
                     action_loss = action_loss + self.augmentation_loss_weight * action_loss_aug
                 else:
                     action_loss_original = action_loss
+                    action_loss_aug_weighted = 0
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
