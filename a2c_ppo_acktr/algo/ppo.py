@@ -58,6 +58,7 @@ class PPO():
         action_loss_aug_epoch = 0
         action_loss_original_epoch = 0
         action_loss_aug_weighted_epoch = 0
+        action_max_value_epoch = 0
         dist_entropy_epoch = 0
         total_norm_epoch = 0
 
