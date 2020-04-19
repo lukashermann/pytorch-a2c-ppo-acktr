@@ -151,7 +151,7 @@ class PPO():
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
-                total_norm_epoch += total_norm.item()
+                total_norm_epoch += total_norm  # no .item() call, as it is already a float value
                 action_loss_original_epoch += action_loss_original.item()
                 if self.augmenter is not None:
                     action_loss_aug_epoch += action_loss_aug.item()
