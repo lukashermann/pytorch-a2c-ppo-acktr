@@ -394,7 +394,7 @@ def train(sysargs):
             "action_loss_aug"] if "action_loss_aug" in additional_data_after_update else None
         action_loss_aug_weighted = additional_data_after_update[
             "action_loss_aug_weighted"] if "action_loss_aug_weighted" in additional_data_after_update else None
-
+        grad_norm = additional_data_after_update["grad_norm"] if "grad_norm" in additional_data_after_update else None
         agent_train_images = additional_data_after_update[
             "images"] if "images" in additional_data_after_update else None
 
@@ -567,6 +567,8 @@ def train(sysargs):
             tb_writer.add_scalar("action_loss_augmented", action_loss_aug, total_num_steps)
             tb_writer.add_scalar("action_loss_augmented_weighted", action_loss_aug_weighted, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
+            tb_writer.add_scalar("grad_norm", grad_norm, total_num_steps)
+
         if args.tensorboard and len(curr_episode_rewards) > 1:
             tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards),
                                  total_num_steps)
