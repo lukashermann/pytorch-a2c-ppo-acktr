@@ -74,6 +74,8 @@ class TransformsAugmenter(Augmenter):
         assert "recurrent_hidden_states_batch" in kwargs
         assert "masks_batch" in kwargs
 
+        additional_data = {}
+
         # Unpack
         actor_critic, \
         recurrent_hidden_states_batch, masks_batch = kwargs['actor_critic'], \
@@ -117,7 +119,11 @@ class TransformsAugmenter(Augmenter):
         else:
             action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
                                                            action_unlab_aug)
-        return action_loss_aug, obs_batch_aug
+
+        # Determine max action for tracing actions
+        additional_data["action_aug_max_value"] = torch.max(torch.max(action_unlab), torch.max(action_unlab_aug))
+
+        return action_loss_aug, obs_batch_aug, additional_data
 
 
 class TransformsBatchAugmenter(TransformsAugmenter):
