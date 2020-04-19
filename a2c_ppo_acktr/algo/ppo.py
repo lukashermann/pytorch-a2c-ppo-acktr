@@ -100,7 +100,7 @@ class PPO():
                     if not self.augmentation_loss_random_prob or \
                             self.augmentation_loss_random_prob > random.random():
 
-                        action_loss_aug, aug_obs_batch_augmented = self.augmenter.calculate_loss(
+                        action_loss_aug, aug_obs_batch_augmented, augmenter_loss_data = self.augmenter.calculate_loss(
                             actor_critic=self.actor_critic,
                             obs_batch=aug_obs_batch_orig,
                             recurrent_hidden_states_batch=recurrent_hidden_states_batch,
@@ -158,6 +158,12 @@ class PPO():
                 action_loss_original_epoch += action_loss_original.item()
                 if self.augmenter is not None:
                     action_loss_aug_epoch += action_loss_aug.item()
+                    action_loss_aug_weighted_epoch += action_loss_aug_weighted
+                    # In order to analyse the action space we report the max action performed in the augmentation step
+                    if action_aug_max_value_epoch >= augmenter_loss_data["action_aug_max_value"]:
+                        action_aug_max_value_epoch = augmenter_loss_data["action_aug_max_value"]
+                if action_max_value_epoch >= augmenter_loss_data["action_max_value"]:
+                    action_max_value_epoch = augmenter_loss_data["action_max_value"]
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
@@ -172,7 +178,9 @@ class PPO():
         additional_data = {
             "action_loss_aug": action_loss_aug_epoch,
             "action_loss_original": action_loss_original_epoch,
-            "action_loss_aug_weighted": action_loss_aug_weighted,
+            "action_loss_aug_weighted": action_loss_aug_weighted_epoch,
+            "action_max_value_aug": action_aug_max_value_epoch,
+            "action_max_value": action_max_value_epoch,
             "grad_norm": total_norm_epoch,
             "images": images_epoch
         }

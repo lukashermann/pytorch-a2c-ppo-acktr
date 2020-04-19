@@ -65,6 +65,8 @@ class TransformsAugmenter(Augmenter):
 
         if "use_cnn_loss" in kwargs:
             self.use_cnn_loss = kwargs["use_cnn_loss"]
+        else:
+            self.use_cnn_loss = False
 
     def _calculate_augmentation_loss(self, obs_batch, obs_batch_aug, **kwargs):
 
@@ -93,20 +95,19 @@ class TransformsAugmenter(Augmenter):
                     masks_batch,
                     deterministic=True)
         else:
-            if self.use_cnn_loss:
-                value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
-                    actor_critic.act(
-                        obs_batch,
-                        recurrent_hidden_states_batch,
-                        masks_batch,
-                        deterministic=True)
+            value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
+                actor_critic.act(
+                    obs_batch,
+                    recurrent_hidden_states_batch,
+                    masks_batch,
+                    deterministic=True)
 
-                value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
-                    actor_critic.act(
-                        obs_batch_aug,
-                        recurrent_hidden_states_batch,
-                        masks_batch,
-                        deterministic=True)
+            value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
+                actor_critic.act(
+                    obs_batch_aug,
+                    recurrent_hidden_states_batch,
+                    masks_batch,
+                    deterministic=True)
 
         # Detach action_unlab to prevent the gradient flow through the network
         if self.use_cnn_loss:
