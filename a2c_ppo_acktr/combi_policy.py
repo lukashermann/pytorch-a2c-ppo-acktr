@@ -83,7 +83,7 @@ class CombiPolicy(nn.Module):
             self.dist = Categorical(self.base.output_size, num_outputs)
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
-            self.dist = BetaLayer(self.base.output_size, num_outputs)
+            self.dist = DiagGaussian(self.base.output_size, num_outputs)
         elif action_space.__class__.__name__ == "MultiBinary":
             num_outputs = action_space.shape[0]
             self.dist = Bernoulli(self.base.output_size, num_outputs)
@@ -110,6 +110,8 @@ class CombiPolicy(nn.Module):
             action = dist.mode()
         else:
             action = dist.sample()
+
+        action = torch.clamp(action, min=-1, max=1)
 
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
