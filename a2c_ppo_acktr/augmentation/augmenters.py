@@ -111,19 +111,22 @@ class TransformsAugmenter(Augmenter):
                     masks_batch,
                     deterministic=True)
 
+        # Clip actions
+        action_unlab = action_unlab.clamp(-1, 1)
+        action_unlab_aug = action_unlab_aug.clamp(-1, 1)
+
         # Detach action_unlab to prevent the gradient flow through the network
         if self.use_cnn_loss:
-            torch.nn.functional.cross_entropy(cnn_output_unlab.detach(),
+            aug_loss = torch.nn.functional.cross_entropy(cnn_output_unlab.detach(),
                                               cnn_output_unlab_aug)
-            action_loss_aug = torch.nn.functional.mse_loss()
         else:
-            action_loss_aug = torch.nn.functional.mse_loss(action_unlab.detach(),
+            aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(),
                                                            action_unlab_aug)
 
         # Determine max action for tracing actions
         additional_data["action_aug_max_value"] = torch.max(torch.max(action_unlab), torch.max(action_unlab_aug))
 
-        return action_loss_aug, obs_batch_aug, additional_data
+        return aug_loss, obs_batch_aug, additional_data
 
 
 class TransformsBatchAugmenter(TransformsAugmenter):
@@ -144,10 +147,10 @@ class TransformsBatchAugmenter(TransformsAugmenter):
 
     def augment_image(self, image, **kwargs):
         """
-        
-        :param imgae: 
-        :param kwargs: 
-        :return: 
+
+        :param imgae:
+        :param kwargs:
+        :return:
         """
         return self.__transform_obs_img(image, transformer=self.transformer)
 
