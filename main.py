@@ -221,7 +221,8 @@ def train(sysargs):
                     'difficulty_reg': difficulty_reg}
 
             # Observe reward and next obs
-            obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
+            tanh_action = torch.tanh(action)
+            obs, reward, done, infos = envs.step_with_curriculum_reset(tanh_action, data)
             # obs, reward, done, infos = envs.step(action)
 
             # visualize env 0

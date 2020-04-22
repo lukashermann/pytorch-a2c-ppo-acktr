@@ -111,9 +111,8 @@ class CombiPolicy(nn.Module):
         else:
             action = dist.sample()
 
-        action = torch.clamp(action, min=-1, max=1)
-
         action_log_probs = dist.log_probs(action)
+        action_log_probs -= (2 * (np.log(2) - action - F.softplus(-2 * action))).sum(1, keepdim=True)
         dist_entropy = dist.entropy().mean()
 
         return value, action, action_log_probs, rnn_hxs
@@ -127,6 +126,7 @@ class CombiPolicy(nn.Module):
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
+        action_log_probs -= (2 * (np.log(2) - action - F.softplus(-2 * action))).sum(1, keepdim=True)
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs
