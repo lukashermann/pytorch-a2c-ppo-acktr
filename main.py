@@ -373,7 +373,7 @@ def train(sysargs):
                 with torch.no_grad():
                     _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                         obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
-
+                tanh_action = torch.tanh(action)
                 # Obser reward and next obs
                 obs, reward, done, infos = eval_envs.step(action)
                 if not args.dont_save_images and j % 300 == 0 and save_cnt < 150:

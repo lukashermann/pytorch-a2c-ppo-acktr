@@ -57,5 +57,6 @@ class Model:
             value, action, _, self.recurrent_hidden_states = self.actor_critic.act(obs, self.recurrent_hidden_states,
                                                                                    self.masks,
                                                                                    deterministic=self.deterministic)
-        return action
+        tanh_action = torch.tanh(action)
+        return tanh_action
 
