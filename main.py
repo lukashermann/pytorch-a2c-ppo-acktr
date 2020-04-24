@@ -175,6 +175,12 @@ def train(sysargs):
     augmenter = None
     augmentation_loss_weight = args.augmentation_loss_weight
 
+    if args.augmentation_loss_weight_function_params:
+        params = np.load(args.augmentation_loss_weight_function_params)
+        augmentation_loss_weight_function = np.poly1d(params)
+    else:
+        augmentation_loss_weight_function = None
+
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
                                args.entropy_coef, lr=args.lr,
@@ -201,6 +207,8 @@ def train(sysargs):
 
             augmenter = augmenters.get_augmenter_by_name(args.augmenter,
                                                          augmenter_args={
+                                                             "use_cnn_loss": args.augmentation_use_cnn_loss,
+                                                             "clip_aug_actions": args.augmentation_clip_aug_actions,
                                                              "transformer": "color_transformer",
                                                              "transformer_args": {
                                                                  "hue": 0}})
@@ -211,7 +219,8 @@ def train(sysargs):
                          augmenter=augmenter,
                          return_images=args.save_train_images,
                          augmentation_data_loader=dataloader,
-                         augmentation_loss_weight=augmentation_loss_weight)
+                         augmentation_loss_weight=augmentation_loss_weight,
+                         augmentation_loss_weight_function=augmentation_loss_weight_function)
 
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic, args.value_loss_coef,
@@ -383,6 +392,12 @@ def train(sysargs):
                                                     rollouts.recurrent_hidden_states[-1],
                                                     rollouts.masks[-1]).detach()
 
+        total_num_steps = (j + 1) * args.num_processes * args.num_steps
+
+        # Add current step information to agent as some agent need this info for calculation of losses
+        if hasattr(agent, 'set_current_num_steps'):
+            agent.set_current_num_steps(total_num_steps)
+
         # Update agent
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.tau)
         value_loss, action_loss, dist_entropy, additional_data_after_update = agent.update(
@@ -442,7 +457,6 @@ def train(sysargs):
                         tb_writer_img.add_images("Policy Update Augmentation{}".format(j),
                                                  image / 255.0, image_idx)
 
-        total_num_steps = (j + 1) * args.num_processes * args.num_steps
 
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()

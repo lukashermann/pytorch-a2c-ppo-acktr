@@ -63,10 +63,8 @@ class TransformsAugmenter(Augmenter):
         else:
             self.transformer = transformer
 
-        if "use_cnn_loss" in kwargs:
-            self.use_cnn_loss = kwargs["use_cnn_loss"]
-        else:
-            self.use_cnn_loss = False
+        self.use_cnn_loss = kwargs["use_cnn_loss"] if "use_cnn_loss" in kwargs else False
+        self.clip_aug_actions = kwargs["clip_aug_actions"] if "clip_aug_actions" in kwargs else False
 
     def _calculate_augmentation_loss(self, obs_batch, obs_batch_aug, **kwargs):
 
@@ -112,8 +110,9 @@ class TransformsAugmenter(Augmenter):
                     deterministic=True)
 
         # Clip actions
-        action_unlab = action_unlab.clamp(-1, 1)
-        action_unlab_aug = action_unlab_aug.clamp(-1, 1)
+        if self.clip_aug_actions:
+            action_unlab = action_unlab.clamp(-1, 1)
+            action_unlab_aug = action_unlab_aug.clamp(-1, 1)
 
         # Detach action_unlab to prevent the gradient flow through the network
         if self.use_cnn_loss:

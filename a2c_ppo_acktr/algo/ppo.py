@@ -25,7 +25,8 @@ class PPO():
                  augmentation_loss_random_prob: float = None,
                  return_images: bool = False,
                  augmentation_data_loader=None,
-                 augmentation_loss_weight=0.0):
+                 augmentation_loss_weight=None,
+                 augmentation_loss_weight_function=None):
 
         self.actor_critic = actor_critic
 
@@ -44,8 +45,18 @@ class PPO():
         self.augmenter = augmenter
         self.augmemtation_data_loader = augmentation_data_loader
         self.augmentation_loss_random_prob = augmentation_loss_random_prob
-        self.augmentation_loss_weight = augmentation_loss_weight
+
+        self.augmentation_loss_weight_function = augmentation_loss_weight_function
+        if augmentation_loss_weight:
+            # Define inner function which simply returns constant value
+            self.augmentation_loss_weight = augmentation_loss_weight
+            def constanct_loss_weight(): return self.augmentation_loss_weight
+            self.augmentation_loss_weight_function = constanct_loss_weight
         self.return_images = return_images
+        self.current_num_steps = 0
+
+    def set_current_num_steps(self, steps):
+        self.current_num_steps = steps
 
     def update(self, rollouts):
 
@@ -127,12 +138,18 @@ class PPO():
                 action_loss = -torch.min(surr1, surr2).mean()
 
                 if self.augmenter is not None:
+                    action_loss_aug.retain_grad()  # retain grad for norm calculation
+                    action_loss.retain_grad()
                     action_loss_original = action_loss.clone().detach()
-                    action_loss_aug_weighted = self.augmentation_loss_weight * action_loss_aug.clone().detach()
-                    action_loss = action_loss + self.augmentation_loss_weight * action_loss_aug
+
+                    action_loss_aug_weighted = self.weight_augmentation_loss(step=self.current_num_steps,
+                                                                             action_loss_aug=action_loss_aug)
+                    action_loss_sum = action_loss + action_loss_aug_weighted
                 else:
                     action_loss_original = action_loss
                     action_loss_aug_weighted = 0
+                    action_loss_sum = action_loss
+                action_loss_sum.retain_grad()  # retain grad for norm calculation
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
@@ -146,10 +163,10 @@ class PPO():
 
                 self.optimizer.zero_grad()
 
-                (value_loss * self.value_loss_coef + action_loss -
+                (value_loss * self.value_loss_coef + action_loss_sum -
                  dist_entropy * self.entropy_coef).backward()
                 total_norm = nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
-                                         self.max_grad_norm)
+                                                      self.max_grad_norm)
                 self.optimizer.step()
 
                 value_loss_epoch += value_loss.item()
@@ -189,3 +206,11 @@ class PPO():
         }
 
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, additional_data
+
+    def weight_augmentation_loss(self, step, action_loss_aug, use_absolute_value=True):
+        if self.augmentation_loss_weight_function:
+            factor = abs(self.augmentation_loss_weight_function(
+                step)) if use_absolute_value else self.augmentation_loss_weight_function(step)
+            return factor * action_loss_aug
+        else:
+            return self.augmentation_loss_weight * action_loss_aug

@@ -125,10 +125,16 @@ def get_args(sysargs):
                         help="Batch size of dataset dataloader. If set to same, dataloader will"
                              "use the same batch size as the reinforcement learning policy.")
     parser.add_argument('--augmentation-loss-weight', default=1.0, type=float,
-                        help="Set the factor for weighting the augmentation loss. Range [0.0, 1.0]")
+                        help="Set a constant factor for weighting the augmentation loss. Range [0.0, 1.0]."
+                             "if set, it will override augmentation loss function (and params)")
     parser.add_argument('--augmentation-use-cnn-loss', default=False, action="store_true",
                         help="If set, the augmentation loss is calculated over the CNN output instead of output action")
-
+    parser.add_argument('--augmentation-clip-aug-actions', default=False, action="store_true",
+                        help="If set, the action calculated in the augmentation loss will be clipped to "
+                             "the action range used in the environment")
+    parser.add_argument('--augmentation-loss-weight-function-params', default=None,
+                        help=".npz or .npy file path containing polynomial parameters (compatible with numpy.poly1d)."
+                             "If set, this will override augmentation-loss-weight argument")
     args = parser.parse_args(sysargs)
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
