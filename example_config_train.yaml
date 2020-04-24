@@ -1,0 +1,76 @@
+globals:
+  seed: 1
+  use_cuda: true
+  cuda_deterministic: false
+  num_processes: 16
+  num_steps: 5
+  num_mini_batch: 32
+
+env:
+  name: PongNoFrameskip-v4
+  params_file:
+  num_env_steps: 1000000
+  normalize_obs: true
+  add_timestep: false
+  num_framestack: 1
+
+learning:
+  rl:
+    algo: a2c
+    gamma: 0.99
+    entropy_coef: 0.01
+    value_loss_coef: 0.5
+    max_grad_norm: 0.5
+    ppo:
+      ppo_epoch: 4
+      clip_param: 0.2
+      use_linear_clip_decay: false
+      use_linear_clip_decay_less: false
+    actor_critic:
+      combi_policy: false
+      recurrent_policy: false
+      network_architecture: "symm"
+      cnn_architecture: "nature"
+    gae:
+      enable: false
+      tau: 0.95
+  optimizer:
+    lr: 7e-4
+    eps: 1e-5
+    alpha: 0.99
+    use_linear_lr_decay: false
+    use_linear_lr_decay_half: false
+    use_linear_lr_decay_less: false
+    use_sr_schedule: false
+  curriculum:
+    enable: true
+    adaptive_curriculum: false
+    desired_rew_region_lo: 0.4
+    desired_rew_region_hi: 0.6
+    incr: 0.002
+    rew_q_len: 20
+  consistency_loss:
+    enable: false
+    augmenter:
+    dataset_folder:
+    dataloader_batch_size: same
+    loss_weight: 1.0
+    loss_weight_function_params:
+    use_cnn_loss: false
+    clip_aug_action: false
+
+experiment:
+  snapshot:
+  num_bc_epochs: 1000
+  save_interval: 100
+  log_interval: 10
+  eval_interval:
+  vis: false
+  vis_interval: 1
+  vis_port: 8097
+  save_eval_images: false
+  save_train_images: false
+  root_dir: /tmp/a2c_ppo_acktr
+  save_dir: /tmp/a2c_ppo_acktr
+  log_dir: /tmp/a2c_ppo_acktr
+  tag:
