@@ -71,7 +71,7 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets, **en
 
 
 def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
-                  device, allow_early_resets, curr_args=None, num_frame_stack=None, dont_normalize_obs=False, **kwargs):
+                  device, allow_early_resets, curr_args=None, num_frame_stack=None, normalize_obs=True, **kwargs):
     envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets, **kwargs)
             for i in range(num_processes)]
 
@@ -79,7 +79,7 @@ def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
         envs = SubprocVecEnv(envs)
     else:
         envs = DummyVecEnv(envs)
-    if not dont_normalize_obs:
+    if normalize_obs:
         if isinstance(envs.observation_space, Dict):
             if gamma is None:
                 envs = DictVecNormalize(envs, ret=False)

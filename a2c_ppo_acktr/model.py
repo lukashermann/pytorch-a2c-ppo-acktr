@@ -19,11 +19,10 @@ class Policy(nn.Module):
             base_kwargs = {}
         if base is None:
             if len(obs_shape) == 3:
-                if len(obs_shape) == 3:
-                    if share_layers:
-                        base = CNNBase
-                    else:
-                        base = CNNSeparate
+                if share_layers:
+                    base = CNNBase
+                else:
+                    base = CNNSeparate
             elif len(obs_shape) == 1:
                 base = MLPBase
             else:

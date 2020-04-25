@@ -7,7 +7,7 @@ globals:
   num_mini_batch: 32
 
 env:
-  name: PongNoFrameskip-v4
+  name: stackVel_with_dr-v0
   params_file:
   num_env_steps: 1000000
   normalize_obs: true
@@ -16,18 +16,18 @@ env:
 
 learning:
   rl:
-    algo: a2c
+    algo: ppo
     gamma: 0.99
     entropy_coef: 0.01
     value_loss_coef: 0.5
     max_grad_norm: 0.5
     ppo:
-      ppo_epoch: 4
+      epoch: 4
       clip_param: 0.2
       use_linear_clip_decay: false
       use_linear_clip_decay_less: false
     actor_critic:
-      combi_policy: false
+      combi_policy: true
       recurrent_policy: false
       network_architecture: "symm"
       cnn_architecture: "nature"
@@ -57,7 +57,7 @@ learning:
     loss_weight: 1.0
     loss_weight_function_params:
     use_cnn_loss: false
-    clip_aug_action: false
+    clip_aug_actions: false
 
 experiment:
   snapshot:
