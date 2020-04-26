@@ -69,6 +69,8 @@ def get_args(sysargs):
                         help='PPO clip parameter (default: 0.2)')
 
     # learning.rl.actor_critic
+    parser.add_argument('--learning.rl.actor-critic.snapshot', type=NoneableType(str), default=None,
+                        help='snapshot for pretrained policy (default: None)')
     parser.add_argument('--learning.rl.actor-critic.combi-policy', action='store_true', default=True,
                         help='Use image and state input together')
     parser.add_argument('--learning.rl.actor-critic.recurrent-policy', action='store_true', default=False,
@@ -139,8 +141,6 @@ def get_args(sysargs):
                              "the action range used in the environment")
 
     # experiment
-    parser.add_argument('--experiment.snapshot', type=NoneableType(str), default=None,
-                        help='snapshot for pretrained policy (default: None)')
     parser.add_argument('--experiment.num-bc-epochs', type=int, default=1000,
                         help='Snapshot for pretrained policy (default: None)')
     parser.add_argument('--experiment.save-interval', type=int, default=100,

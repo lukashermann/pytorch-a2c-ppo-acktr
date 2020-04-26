@@ -27,6 +27,7 @@ learning:
       use_linear_clip_decay: false
       use_linear_clip_decay_less: false
     actor_critic:
+      snapshot:
       combi_policy: true
       recurrent_policy: false
       network_architecture: "symm"
