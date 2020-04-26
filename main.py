@@ -133,7 +133,7 @@ def train(sysargs):
                          normalize_obs=cfg.env.normalize_obs,
                          env_params_sampler_dict=cfg.env.params_file)
 
-    if cfg.learning.actor_critic.snapshot is None:
+    if cfg.learning.rl.actor_critic.snapshot is None:
         if cfg.learning.rl.actor_critic.combi_policy:
             base_kwargs = {'recurrent': cfg.learning.rl.actor_critic.recurrent_policy,
                            'cnn_architecture': cfg.learning.rl.actor_critic.cnn_architecture}
@@ -147,7 +147,7 @@ def train(sysargs):
             actor_critic = Policy(envs.observation_space.shape, envs.action_space,
                                   base_kwargs={'recurrent': cfg.learning.rl.actor_critic.recurrent_policy})
     else:
-        load_data = torch.load(cfg.learning.actor_critic.snapshot)
+        load_data = torch.load(cfg.learning.rl.actor_critic.snapshot)
         actor_critic, _, _ = load_data
     actor_critic.to(device)
 
