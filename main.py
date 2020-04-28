@@ -240,9 +240,9 @@ def train(sysargs):
             # if done[0]:
             #     print(reward)
 
-            # for i, info in enumerate(infos):
-            #     if 'episode' in info.keys():
-            #         episode_rewards.append(info['episode']['r'])
+            for i, info in enumerate(infos):
+                if 'episode' in info.keys():
+                    episode_rewards.append(info['episode']['r'])
             #         train_success.append(float(info['task_success']))
             #         if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
             #             # if i == 0: print("curriculum")
