@@ -1,4 +1,7 @@
-gym
+opencv-python
 matplotlib
-pybullet
 jsonargparse
+tensorboardX
+tqdm
+pybullet
+gym
