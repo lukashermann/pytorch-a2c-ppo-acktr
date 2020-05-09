@@ -15,16 +15,16 @@ from baselines.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
 from baselines.common.vec_env.vec_normalize import DictVecNormalize as DictVecNormalize_
 
 
-try:
-    import dm_control2gym
-except ImportError:
-    pass
-
-try:
-    import roboschool
-except ImportError:
-    pass
-
+# try:
+#     import dm_control2gym
+# except ImportError:
+#     pass
+#
+# try:
+#     import roboschool
+# except ImportError:
+#     pass
+#
 # try:
 #     import pybullet_envs
 # except ImportError:
@@ -373,11 +373,12 @@ class DictVecPyTorchFrameStack(VecEnvWrapper):
 
 
 class CurriculumInfoWrapper(VecEnvWrapper):
-    def __init__(self, venv, num_updates, num_update_steps, desired_rew_region, incr):
+    def __init__(self, venv, num_updates, num_update_steps, desired_rew_region, incr, tb_writer, num_processes):
         self.venv = venv
         super(CurriculumInfoWrapper, self).__init__(venv)
         self.num_updates = num_updates
         self.num_update_steps = num_update_steps
+        self.num_processes = num_processes
         self.step_counter = 0
         self.update_counter = 0
         self.difficulty_cur = 0
@@ -388,6 +389,9 @@ class CurriculumInfoWrapper(VecEnvWrapper):
         self.reg_success = deque(maxlen=20)
         self.desired_rew_region = desired_rew_region
         self.incr = incr
+        self.tb_writer = tb_writer
+        self.num_regular_resets = 0
+        self.num_resets = 0
 
     def update_difficulties(self):
         if len(self.curr_success) > 1:
@@ -421,6 +425,9 @@ class CurriculumInfoWrapper(VecEnvWrapper):
         if self.step_counter % self.num_update_steps == 0:
             self.update_counter += 1
             self.update_difficulties()
+            self.write_tb_log()
+            self.num_regular_resets = 0
+            self.num_resets = 0
         data = self.create_data_dict()
         self.step_async_with_curriculum_reset(action, data)
         return self.step_wait()
@@ -438,9 +445,12 @@ class CurriculumInfoWrapper(VecEnvWrapper):
                 if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
                     self.curr_episode_rewards.append(info['episode']['r'])
                     self.curr_success.append(float(info['task_success']))
+                    self.num_resets += 1
                 elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
                     self.reg_episode_rewards.append(info['episode']['r'])
                     self.reg_success.append(float(info['task_success']))
+                    self.num_resets += 1
+                    self.num_regular_resets += 1
         return obs, rews, news, infos
 
     def reset(self):
@@ -451,7 +461,21 @@ class CurriculumInfoWrapper(VecEnvWrapper):
         obs = self.venv.reset_from_curriculum(data)
         return obs
 
+    def write_tb_log(self):
+        total_num_steps = (self.update_counter + 1) * self.num_processes * self.num_update_steps
+        self.tb_writer.add_scalar("curr_success_rate", np.mean(self.curr_success) if len(self.curr_success) else 0, total_num_steps, total_num_steps)
+        self.tb_writer.add_scalar("reg_success_rate", np.mean(self.reg_success) if len(self.reg_success) else 0, total_num_steps)
+        self.tb_writer.add_scalar("difficulty_cur", self.difficulty_cur, total_num_steps)
+        self.tb_writer.add_scalar("difficulty_reg", self.difficulty_reg, total_num_steps)
+
+        if len(self.curr_episode_rewards) > 1:
+            self.tb_writer.add_scalar("curr_eprewmean_steps", np.mean(self.curr_episode_rewards), total_num_steps)
+            self.tb_writer.add_scalar("regular_resets_ratio", self.num_regular_resets / self.num_resets if self.num_resets > 0 else 0,total_num_steps)
+        if len(self.reg_episode_rewards) > 1:
+            self.tb_writer.add_scalar("reg_eprewmean_steps", np.mean(self.reg_episode_rewards), total_num_steps)
+
     def close(self):
         self.venv.close()
+
 
 

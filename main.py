@@ -117,6 +117,7 @@ def train(sysargs):
     log_file = open(os.path.join(cfg.log_dir, "log.txt"), "wt")
 
     curriculum_log_file = open(os.path.join(cfg.log_dir, "curriculum_log.json"), 'w')
+    # curriculum_log_file = open(os.path.join(args.log_dir, "curriculum_log.json"), 'w')
 
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if cfg.globals.cuda_enabled else "cpu")
@@ -125,6 +126,20 @@ def train(sysargs):
         from visdom import Visdom
         viz = Visdom(port=cfg.experiment.vis_port)
         win = None
+
+    desired_rew_region = (args.desired_rew_region_lo, args.desired_rew_region_hi)
+    if args.no_curriculum:
+        curr_args = None
+    else:
+        curr_args = {"num_updates": num_updates,
+                     "num_update_steps" : args.num_steps,
+                     "desired_rew_region": desired_rew_region,
+                     "incr": args.incr,
+                     "tb_writer": tb_writer,
+                     "num_processes": args.num_processes}
+    envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
+                         args.gamma, args.log_dir, args.add_timestep, device, False, curr_args=curr_args,
+                         num_frame_stack=args.num_framestack, dont_normalize_obs=args.dont_normalize_obs)
 
     envs = make_vec_envs(cfg.env.name, cfg.globals.seed, cfg.globals.num_processes,
                          cfg.learning.rl.gamma, cfg.log_dir, cfg.env.add_timestep, device,
@@ -219,17 +234,17 @@ def train(sysargs):
         rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=cfg.learning.curriculum.rew_q_len)
-    curr_episode_rewards = deque(maxlen=cfg.learning.curriculum.rew_q_len)
-    reg_episode_rewards = deque(maxlen=cfg.learning.curriculum.rew_q_len)
+    episode_rewards = deque(maxlen=args.rew_q_len)
+    # curr_episode_rewards = deque(maxlen=args.rew_q_len)
+    # reg_episode_rewards = deque(maxlen=args.rew_q_len)
     eval_reg_episode_rewards = deque(maxlen=32)
-    train_success = deque(maxlen=cfg.learning.curriculum.rew_q_len)
-    curr_success = deque(maxlen=cfg.learning.curriculum.rew_q_len)
-    reg_success = deque(maxlen=cfg.learning.curriculum.rew_q_len)
-    difficulty_cur = 0
-    difficulty_reg = 0
-    desired_rew_region = (cfg.learning.curriculum.desired_rew_region_lo, cfg.learning.curriculum.desired_rew_region_hi)
-    incr = cfg.learning.curriculum.incr
+    # train_success = deque(maxlen=args.rew_q_len)
+    # curr_success = deque(maxlen=args.rew_q_len)
+    # reg_success = deque(maxlen=args.rew_q_len)
+    # difficulty_cur = 0
+    # difficulty_reg = 0
+
+    # incr = args.incr
     eval_episode_rewards = []
 
     start = time.time()
@@ -281,25 +296,21 @@ def train(sysargs):
                         rollouts.recurrent_hidden_states[step],
                         rollouts.masks[step])
 
-            data = {'update_step': j,
-                    'num_updates': num_updates,
-                    'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None,
-                    'curr_eprewmean': np.mean(curr_episode_rewards) if len(
-                        curr_episode_rewards) > 1 else 0,
-                    'eval_eprewmean': np.mean(eval_episode_rewards) if len(
-                        eval_episode_rewards) > 1 else 0,
-                    'reg_eprewmean': np.mean(reg_episode_rewards) if len(
-                        reg_episode_rewards) > 1 else 0,
-                    'curr_success_rate': np.mean(curr_success) if len(curr_success) > 1 else 0,
-                    'reg_success_rate': np.mean(reg_success) if len(reg_success) > 1 else 0,
-                    'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(
-                        eval_reg_episode_rewards) > 1 else 0,
-                    'difficulty_cur': difficulty_cur,
-                    'difficulty_reg': difficulty_reg}
+            # data = {'update_step': j,
+            #         'num_updates': num_updates,
+            #         'eprewmean': np.mean(episode_rewards) if len(episode_rewards) > 1 else None,
+            #         'curr_eprewmean': np.mean(curr_episode_rewards) if len(curr_episode_rewards) > 1 else 0,
+            #         'eval_eprewmean': np.mean(eval_episode_rewards) if len(eval_episode_rewards) > 1 else 0,
+            #         'reg_eprewmean': np.mean(reg_episode_rewards) if len(reg_episode_rewards) > 1 else 0,
+            #         'curr_success_rate': np.mean(curr_success) if len(curr_success) > 1 else 0,
+            #         'reg_success_rate': np.mean(reg_success) if len(reg_success) > 1 else 0,
+            #         'eval_reg_eprewmean': np.mean(eval_reg_episode_rewards) if len(eval_reg_episode_rewards) > 1 else 0,
+            #         'difficulty_cur': difficulty_cur,
+            #         'difficulty_reg': difficulty_reg}
 
             # Observe reward and next obs
-            obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
-            # obs, reward, done, infos = envs.step(action)
+            # obs, reward, done, infos = envs.step_with_curriculum_reset(action, data)
+            obs, reward, done, infos = envs.step(action)
 
             # visualize env 0
             # img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(np.uint8)
@@ -316,28 +327,28 @@ def train(sysargs):
             for i, info in enumerate(infos):
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
-                    train_success.append(float(info['task_success']))
-                    if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
-                        # if i == 0: print("curriculum")
-                        num_resets += 1
-                        curr_episode_rewards.append(info['episode']['r'])
-                        curr_success.append(float(info['task_success']))
-                    elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
-                        # if i == 0: print("regular")
-                        num_regular_resets += 1
-                        num_resets += 1
-                        reg_episode_rewards.append(info['episode']['r'])
-                        eval_reg_episode_rewards.append(info['episode']['r'])
-                        reg_success.append(float(info['task_success']))
-                if 'episode_info' in info.keys():
-                    info['episode_info']['env'] = i
-                    info['episode_info']['difficulty_cur'] = difficulty_cur
-                    info['episode_info']['difficulty_reg'] = difficulty_reg
-                    info['episode_info']['reward'] = reward[i].numpy()[0]
-                    info['episode_info']['progress'] = j / num_updates
-                    json.dump(info['episode_info'], curriculum_log_file, cls=NumpyEncoder)
-                    curriculum_log_file.write('\n')
-                    curriculum_log_file.flush()
+            #         train_success.append(float(info['task_success']))
+            #         if 'reset_info' in info.keys() and info['reset_info'] == 'curriculum':
+            #             # if i == 0: print("curriculum")
+            #             num_resets += 1
+            #             curr_episode_rewards.append(info['episode']['r'])
+            #             curr_success.append(float(info['task_success']))
+            #         elif 'reset_info' in info.keys() and info['reset_info'] == 'regular':
+            #             # if i == 0: print("regular")
+            #             num_regular_resets += 1
+            #             num_resets += 1
+            #             reg_episode_rewards.append(info['episode']['r'])
+            #             eval_reg_episode_rewards.append(info['episode']['r'])
+            #             reg_success.append(float(info['task_success']))
+            #     if 'episode_info' in info.keys():
+            #         info['episode_info']['env'] = i
+            #         info['episode_info']['difficulty_cur'] = difficulty_cur
+            #         info['episode_info']['difficulty_reg'] = difficulty_reg
+            #         info['episode_info']['reward'] = reward[i].numpy()[0]
+            #         info['episode_info']['progress'] = j / num_updates
+            #         json.dump(info['episode_info'], curriculum_log_file, cls=NumpyEncoder)
+            #         curriculum_log_file.write('\n')
+            #         curriculum_log_file.flush()
 
             # If done then clean the history of observations.
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
@@ -345,19 +356,18 @@ def train(sysargs):
             rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward,
                             masks)
 
-        if cfg.learning.curriculum.enable and len(curr_success) > 1:
-            if np.mean(curr_success) > desired_rew_region[1]:
-                difficulty_cur += incr
-            elif np.mean(curr_success) < desired_rew_region[0]:
-                difficulty_cur -= incr
-            difficulty_cur = np.clip(difficulty_cur, 0, 1)
-
-        if cfg.learning.curriculum.enable and len(reg_success) > 1:
-            if np.mean(reg_success) > desired_rew_region[1]:
-                difficulty_reg += incr
-            elif np.mean(reg_success) < desired_rew_region[0]:
-                difficulty_reg -= incr
-            difficulty_reg = np.clip(difficulty_reg, 0, 1)
+        # if args.adaptive_curriculum and len(curr_success) > 1:
+        #     if np.mean(curr_success) > desired_rew_region[1]:
+        #         difficulty_cur += incr
+        #     elif np.mean(curr_success) < desired_rew_region[0]:
+        #         difficulty_cur -= incr
+        #     difficulty_cur = np.clip(difficulty_cur, 0, 1)
+        # if args.adaptive_curriculum and len(reg_success) > 1:
+        #     if np.mean(reg_success) > desired_rew_region[1]:
+        #         difficulty_reg += incr
+        #     elif np.mean(reg_success) < desired_rew_region[0]:
+        #         difficulty_reg -= incr
+        #     difficulty_reg = np.clip(difficulty_reg, 0, 1)
         with torch.no_grad():
             if cfg.learning.rl.actor_critic.combi_policy:
                 next_value = actor_critic.get_value({'img': rollouts.obs_img[-1],
@@ -441,19 +451,12 @@ def train(sysargs):
             log_output = "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward " \
                          "{:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(j,
                                                                                 total_num_steps,
-                                                                                int(
-                                                                                    total_num_steps / (
-                                                                                            end - start)),
-                                                                                len(
-                                                                                    episode_rewards),
-                                                                                np.mean(
-                                                                                    episode_rewards),
-                                                                                np.median(
-                                                                                    episode_rewards),
-                                                                                np.min(
-                                                                                    episode_rewards),
-                                                                                np.max(
-                                                                                    episode_rewards),
+                                                                                int(total_num_steps / (end - start)),
+                                                                                len(episode_rewards),
+                                                                                np.mean(episode_rewards),
+                                                                                np.median(episode_rewards),
+                                                                                np.min(episode_rewards),
+                                                                                np.max(episode_rewards),
                                                                                 dist_entropy,
                                                                                 value_loss,
                                                                                 action_loss)
@@ -519,7 +522,7 @@ def train(sysargs):
                 for info in infos:
                     if 'episode' in info.keys():
                         eval_episode_rewards.append(info['episode']['r'])
-                        eval_reg_episode_rewards.append(info['episode']['r'])
+                        # eval_reg_episode_rewards.append(info['episode']['r'])
 
             eval_envs.close()
             if cfg.tensorboard:
@@ -552,12 +555,12 @@ def train(sysargs):
         if cfg.tensorboard and len(episode_rewards) > 1:
             tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), j)
             tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
-            tb_writer.add_scalar("training_success_rate", np.mean(train_success), total_num_steps)
-            tb_writer.add_scalar("curr_success_rate", np.mean(curr_success), total_num_steps)
-            tb_writer.add_scalar("reg_success_rate", np.mean(reg_success), total_num_steps)
+            # tb_writer.add_scalar("training_success_rate", np.mean(train_success), total_num_steps)
+            # tb_writer.add_scalar("curr_success_rate", np.mean(curr_success) if len(curr_success) else 0, total_num_steps, total_num_steps)
+            # tb_writer.add_scalar("reg_success_rate", np.mean(reg_success)if len(reg_success) else 0, total_num_steps)
             tb_writer.add_scalar("eprewmedian_steps", np.median(episode_rewards), total_num_steps)
-            tb_writer.add_scalar("difficulty_cur", difficulty_cur, total_num_steps)
-            tb_writer.add_scalar("difficulty_reg", difficulty_reg, total_num_steps)
+            # tb_writer.add_scalar("difficulty_cur", difficulty_cur, total_num_steps)
+            # tb_writer.add_scalar("difficulty_reg", difficulty_reg, total_num_steps)
             tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
             tb_writer.add_scalar("action_loss_sum", action_loss, total_num_steps)
             tb_writer.add_scalar("action_loss_original", action_loss_original, total_num_steps)
@@ -567,6 +570,11 @@ def train(sysargs):
             tb_writer.add_scalar("action_max_value", action_max_value, total_num_steps)
             tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
             tb_writer.add_scalar("grad_norm", grad_norm, total_num_steps)
+        # if args.tensorboard and len(curr_episode_rewards) > 1:
+            # tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards), total_num_steps)
+            # tb_writer.add_scalar("regular_resets_ratio", num_regular_resets / num_resets if num_resets > 0 else 0, total_num_steps)
+        # if args.tensorboard and len(reg_episode_rewards) > 1:
+        #     tb_writer.add_scalar("reg_eprewmean_steps", np.mean(reg_episode_rewards), total_num_steps)
 
         if cfg.tensorboard and len(curr_episode_rewards) > 1:
             tb_writer.add_scalar("curr_eprewmean_steps", np.mean(curr_episode_rewards),
