@@ -11,6 +11,10 @@ from collections import deque
 import cv2
 import numpy as np
 import torch
+from tqdm import tqdm
+from tensorboardX import SummaryWriter
+from torch.utils.data import DataLoader
+
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.augmentation import augmenters
@@ -23,9 +27,9 @@ from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, \
     update_linear_schedule_half, \
     update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-from tensorboardX import SummaryWriter
-from torch.utils.data import DataLoader
-from tqdm import tqdm
+
+from gym_grasping.envs.grasping_env import GraspingEnv
+
 
 
 class NumpyEncoder(json.JSONEncoder):
