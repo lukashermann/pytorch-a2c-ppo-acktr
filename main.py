@@ -395,11 +395,15 @@ def train(sysargs):
                 and j % cfg.experiment.eval_interval == 0):
             eval_steps = 32 if j < num_updates - 1 else 100
 
+            env_kwargs = {"env_params_sampler_dict": cfg.env.params_file,
+                          "data_folder_path": cfg.env.data_folder_path}
             eval_envs = make_vec_envs(
                 cfg.env.name, cfg.globals.seed + cfg.globals.num_processes * j, cfg.globals.num_processes,
                 cfg.learning.rl.gamma, eval_log_dir, cfg.env.add_timestep, device, True,
                 num_frame_stack=cfg.env.num_framestack,
-                normalize_obs=cfg.env.normalize_obs)
+                normalize_obs=cfg.env.normalize_obs,
+                env_kwargs=env_kwargs
+            )
 
             vec_norm = get_vec_normalize(eval_envs)
             if vec_norm is not None:
