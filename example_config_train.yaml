@@ -13,6 +13,7 @@ env:
   normalize_obs: true
   add_timestep: false
   num_framestack: 1
+  data_folder_path:
 
 learning:
   rl:

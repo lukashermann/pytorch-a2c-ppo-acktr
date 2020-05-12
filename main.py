@@ -31,7 +31,6 @@ from a2c_ppo_acktr.visualize import visdom_plot
 from gym_grasping.envs.grasping_env import GraspingEnv
 
 
-
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):
@@ -118,7 +117,7 @@ def train(sysargs):
     desired_rew_region = (cfg.learning.curriculum.desired_rew_region_lo, cfg.learning.curriculum.desired_rew_region_hi)
     if cfg.learning.curriculum.enable:
         curr_args = {"num_updates": num_updates,
-                     "num_update_steps" : cfg.globals.num_steps,
+                     "num_update_steps": cfg.globals.num_steps,
                      "desired_rew_region": desired_rew_region,
                      "incr": cfg.learning.curriculum.incr,
                      "tb_writer": tb_writer,
@@ -126,12 +125,14 @@ def train(sysargs):
     else:
         curr_args = None
 
+    env_kwargs = {"env_params_sampler_dict": cfg.env.params_file,
+                  "data_folder_path": cfg.env.data_folder_path}
     envs = make_vec_envs(cfg.env.name, cfg.globals.seed, cfg.globals.num_processes,
                          cfg.learning.rl.gamma, cfg.log_dir, cfg.env.add_timestep, device,
                          allow_early_resets=False, curr_args=curr_args,
                          num_frame_stack=cfg.env.num_framestack,
                          normalize_obs=cfg.env.normalize_obs,
-                         env_params_sampler_dict=cfg.env.params_file)
+                         env_kwargs=env_kwargs)
 
     if cfg.learning.rl.actor_critic.snapshot is None:
         if cfg.learning.rl.actor_critic.combi_policy:
@@ -190,7 +191,8 @@ def train(sysargs):
                                                              "transformer": "color_transformer",
                                                              "transformer_args": {
                                                                  "hue": 0}})
-        agent = algo.PPO(actor_critic, cfg.learning.rl.ppo.clip_param, cfg.learning.rl.ppo.epoch, cfg.globals.num_mini_batch,
+        agent = algo.PPO(actor_critic, cfg.learning.rl.ppo.clip_param, cfg.learning.rl.ppo.epoch,
+                         cfg.globals.num_mini_batch,
                          cfg.learning.rl.value_loss_coef, cfg.learning.rl.entropy_coef, lr=cfg.learning.optimizer.lr,
                          eps=cfg.learning.optimizer.eps,
                          max_grad_norm=cfg.learning.rl.max_grad_norm,
@@ -370,7 +372,6 @@ def train(sysargs):
                         # TODO: Change obs range to [0, 1]
                         tb_writer_img.add_images("Policy Update Augmentation{}".format(j),
                                                  image / 255.0, image_idx)
-
 
         if j % cfg.experiment.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
