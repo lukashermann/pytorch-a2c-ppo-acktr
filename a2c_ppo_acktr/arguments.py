@@ -37,7 +37,7 @@ def get_args(sysargs):
                         help='Environment to train on (default: PongNoFrameskip-v4)')
     parser.add_argument('--env.params-file', type=NoneableType(str), default=None,
                         help='Load environment sampler parameters from file')
-    parser.add_argument('--env.data_folder_path', default=None,
+    parser.add_argument('--env.data-folder-path', default=None,
                         help='Set the data folder path if the env uses external data (e.g. curriculum env)')
     parser.add_argument('--env.num-env-steps', type=int, default=10e6,
                         help='Number of environment steps to train (default: 10e6)')

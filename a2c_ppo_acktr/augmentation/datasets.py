@@ -51,8 +51,6 @@ The ./data folder contains one folder per episode, which contains a episode_{epi
     OR 
 The ./data folder contains one folder per episode with one pickle file per step named step_{step_num}.pickle
 """
-
-
 class ObsDataset(Dataset):
 
     def __init__(self, root_folder, one_file_per_step=False):
