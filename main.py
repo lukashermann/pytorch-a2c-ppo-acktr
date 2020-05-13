@@ -5,12 +5,15 @@ import glob
 import json
 import os
 import sys
+import shutil
 import time
 from collections import deque
 
 import cv2
 import numpy as np
 import torch
+import yaml
+
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
@@ -96,10 +99,8 @@ def train(sysargs):
         for f in files:
             os.remove(f)
 
-    with open(os.path.join(cfg.log_dir, "hyperparams.txt"), "w") as file:
-        file.write("python " + " ".join(sysargs) + "\n")
-        for arg in vars(cfg):
-            file.write(str(arg) + ' ' + str(getattr(cfg, arg)) + '\n')
+    # Copy original configuration if present to new location
+    shutil.copyfile(str(cfg.config[0]), os.path.join(cfg.log_dir, "config.yaml"))
 
     log_file = open(os.path.join(cfg.log_dir, "log.txt"), "wt")
 
