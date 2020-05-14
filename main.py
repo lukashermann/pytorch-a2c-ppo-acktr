@@ -173,7 +173,10 @@ def _get_env_args(cfg):
     return env_kwargs
 
 def _load_actor_critic_from_snapshot(snapshot_path):
-    load_data = torch.load(snapshot_path)
+    if os.path.isabs(snapshot_path):
+        load_data = torch.load(snapshot_path)
+    else:
+        load_data = torch.load(os.path.join(os.getcwd(), snapshot_path))
     actor_critic, _, _ = load_data
     return actor_critic
 
