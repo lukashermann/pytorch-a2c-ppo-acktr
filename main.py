@@ -136,6 +136,9 @@ def setup_dirs_and_logging(cfg: SimpleNamespace):
     # TODO: Remove?
     # curriculum_log_file = open(os.path.join(cfg.log_dir, "curriculum_log.json"), 'w')
 
+    # Copy original configuration if present to new location
+    shutil.copyfile(str(cfg.config[0]), os.path.join(cfg.log_dir, "config.yaml"))
+
     return tb_writer, tb_writer_img, log_file
 
 
@@ -416,9 +419,7 @@ def _eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir,
         tb_writer.flush()
 
     eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(
-        len(eval_episode_rewards),
-        np.mean(
-            eval_episode_rewards))
+        len(eval_episode_rewards), np.mean(eval_episode_rewards))
     print()
     print(eval_log_output)
     print()
