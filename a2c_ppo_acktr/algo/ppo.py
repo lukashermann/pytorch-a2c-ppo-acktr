@@ -47,13 +47,14 @@ class PPO():
         self.augmentation_loss_random_prob = augmentation_loss_random_prob
 
         self.augmentation_loss_weight_function = augmentation_loss_weight_function
-        if augmentation_loss_weight:
+        if augmentation_loss_weight is not None:
             # Define inner function which simply returns constant value
             self.augmentation_loss_weight = augmentation_loss_weight
             def constanct_loss_weight(*args): return self.augmentation_loss_weight
             self.augmentation_loss_weight_function = constanct_loss_weight
         self.return_images = return_images
         self.current_num_steps = 0
+
 
     def set_current_num_steps(self, steps):
         self.current_num_steps = steps
