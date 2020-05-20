@@ -22,7 +22,6 @@ class PPO():
                  max_grad_norm=None,
                  use_clipped_value_loss=True,
                  augmenter: Augmenter = None,
-                 augmentation_loss_random_prob: float = None,
                  return_images: bool = False,
                  augmentation_data_loader=None,
                  augmentation_loss_weight=None,
@@ -44,42 +43,29 @@ class PPO():
 
         self.augmenter = augmenter
         self.augmemtation_data_loader = augmentation_data_loader
-        self.augmentation_loss_random_prob = augmentation_loss_random_prob
 
         self.augmentation_loss_weight_function = augmentation_loss_weight_function
         if augmentation_loss_weight is not None:
             # Define inner function which simply returns constant value
             self.augmentation_loss_weight = augmentation_loss_weight
+
             def constanct_loss_weight(*args): return self.augmentation_loss_weight
+
             self.augmentation_loss_weight_function = constanct_loss_weight
         self.return_images = return_images
         self.current_num_steps = 0
-
 
     def set_current_num_steps(self, steps):
         self.current_num_steps = steps
 
     def update(self, rollouts):
+        update_log = self.init_update_logging(with_augmentation=self.augmenter != None)
 
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
                 advantages.std() + 1e-5)
 
-        value_loss_epoch = 0
-        action_loss_epoch = 0
-        action_loss_aug_epoch = 0
-        action_loss_original_epoch = 0
-        action_loss_aug_weighted_epoch = 0
-        action_max_value_epoch = 0
-        action_aug_max_value_epoch = 0
-        dist_entropy_epoch = 0
-        total_norm_epoch = 0
 
-        # Store images of training step
-        images_epoch = {"obs": []}
-        if self.augmenter:
-            images_epoch["obs_aug_orig"] = []
-            images_epoch["obs_aug_augmented"] = []
 
         for e in tqdm(range(self.ppo_epoch), desc="PPO Epochs"):
             if self.actor_critic.is_recurrent:
@@ -109,23 +95,20 @@ class PPO():
                                               aug_obs_batch_orig.items()}
                     else:
                         aug_obs_batch_orig = obs_batch
-                    # Only calculate augmentation loss sporadically
-                    if not self.augmentation_loss_random_prob or \
-                            self.augmentation_loss_random_prob > random.random():
 
-                        action_loss_aug, aug_obs_batch_augmented, augmenter_loss_data = self.augmenter.calculate_loss(
-                            actor_critic=self.actor_critic,
-                            obs_batch=aug_obs_batch_orig,
-                            recurrent_hidden_states_batch=recurrent_hidden_states_batch,
-                            masks_batch=masks_batch,
-                            return_images=self.return_images)
+                    action_loss_aug, aug_obs_batch_augmented, augmenter_loss_data = self.augmenter.calculate_loss(
+                        actor_critic=self.actor_critic,
+                        obs_batch=aug_obs_batch_orig,
+                        recurrent_hidden_states_batch=recurrent_hidden_states_batch,
+                        masks_batch=masks_batch,
+                        return_images=self.return_images)
 
-                        if self.return_images:
-                            images_epoch["obs_aug_orig"].append(aug_obs_batch_orig['img'].cpu())
-                            images_epoch["obs_aug_augmented"].append(aug_obs_batch_augmented['img'].cpu())
+                    if self.return_images:
+                        update_log['images']["obs_aug_orig"].append(aug_obs_batch_orig['img'].cpu())
+                        update_log['images']["obs_aug_augmented"].append(aug_obs_batch_augmented['img'].cpu())
 
                 if self.return_images:
-                    images_epoch["obs"].append(obs_batch['img'].cpu())
+                    update_log['images']["obs"].append(obs_batch['img'].cpu())
 
                 # Reshape to do in a single forward pass for all steps
                 values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
@@ -139,15 +122,13 @@ class PPO():
                 action_loss = -torch.min(surr1, surr2).mean()
 
                 if self.augmenter is not None:
-                    action_loss_aug.retain_grad()  # retain grad for norm calculation
-                    action_loss.retain_grad()
-                    action_loss_original = action_loss.clone().detach()
+                    action_loss.retain_grad()  # retain grad for norm calculation
+                    action_loss_aug.retain_grad()
 
                     action_loss_aug_weighted = self.weight_augmentation_loss(step=self.current_num_steps,
                                                                              action_loss_aug=action_loss_aug)
                     action_loss_sum = action_loss + action_loss_aug_weighted
                 else:
-                    action_loss_original = action_loss
                     action_loss_aug_weighted = 0
                     action_loss_sum = action_loss
                 action_loss_sum.retain_grad()  # retain grad for norm calculation
@@ -170,43 +151,35 @@ class PPO():
                                                       self.max_grad_norm)
                 self.optimizer.step()
 
-                value_loss_epoch += value_loss.item()
-                action_loss_epoch += action_loss.item()
-                dist_entropy_epoch += dist_entropy.item()
-                total_norm_epoch += total_norm  # no .item() call, as it is already a float value
-                action_loss_original_epoch += action_loss_original.item()
+                update_log['value_loss'] += value_loss.item()
+                update_log['action_loss'] += action_loss.item()
+                update_log['action_loss_sum'] += action_loss_sum.item()
+                update_log['dist_entropy'] += dist_entropy.item()
+                update_log['total_norm'] += total_norm  # no .item() call, as it is already a float value
+
                 if self.augmenter is not None:
-                    action_loss_aug_epoch += action_loss_aug.item()
-                    action_loss_aug_weighted_epoch += action_loss_aug_weighted
+                    update_log['action_loss_aug'] += action_loss_aug.item()
+                    update_log['action_loss_aug_weighted'] += action_loss_aug_weighted
                     # In order to analyse the action space we report the max action performed in the augmentation step
-                    if action_aug_max_value_epoch >= augmenter_loss_data["action_aug_max_value"]:
-                        action_aug_max_value_epoch = augmenter_loss_data["action_aug_max_value"]
+                    if augmenter_loss_data["action_aug_max_value"] >= update_log['action_aug_max_value']:
+                        update_log['action_aug_max_value'] = augmenter_loss_data["action_aug_max_value"]
 
                 max_actions_batch = torch.max(actions_batch)
-                if max_actions_batch >= action_max_value_epoch:
-                    action_max_value_epoch = max_actions_batch
+                if max_actions_batch >= update_log['action_max_value']:
+                    update_log['action_max_value'] = max_actions_batch
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
-        value_loss_epoch /= num_updates
-        action_loss_epoch /= num_updates
-        action_loss_aug_epoch /= num_updates
-        action_loss_aug_weighted_epoch /= num_updates
-        action_loss_original_epoch /= num_updates
-        dist_entropy_epoch /= num_updates
-        total_norm_epoch /= num_updates
+        update_log['value_loss'] /= num_updates
+        update_log['action_loss'] /= num_updates
+        update_log['action_loss_sum'] /= num_updates
+        update_log['dist_entropy'] /= num_updates
+        update_log['total_norm'] /= num_updates
+        if self.augmenter is not None:
+            update_log['action_loss_aug'] /= num_updates
+            update_log['action_loss_aug_weighted'] /= num_updates
 
-        additional_data = {
-            "action_loss_aug": action_loss_aug_epoch,
-            "action_loss_original": action_loss_original_epoch,
-            "action_loss_aug_weighted": action_loss_aug_weighted_epoch,
-            "action_max_value_aug": action_aug_max_value_epoch,
-            "action_max_value": action_max_value_epoch,
-            "grad_norm": total_norm_epoch,
-            "images": images_epoch
-        }
-
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, additional_data
+        return update_log['value_loss'], update_log['action_loss'], update_log['dist_entropy'], update_log
 
     def weight_augmentation_loss(self, step, action_loss_aug, use_absolute_value=True):
         if self.augmentation_loss_weight_function:
@@ -215,3 +188,25 @@ class PPO():
             return factor * action_loss_aug
         else:
             return self.augmentation_loss_weight * action_loss_aug
+
+    def init_update_logging(self, with_augmentation=False):
+        update_log = {
+            'value_loss': 0,
+            'action_loss': 0,
+            'action_loss_sum': 0,
+            'action_max_value': 0,
+            'dist_entropy': 0,
+            'total_norm': 0,
+            'grad_norm': 0,
+            'images': {"obs": []}
+        }
+
+        if with_augmentation:
+            update_log['action_loss_aug'] = 0
+            update_log['action_loss_aug_weighted'] = 0
+            update_log['action_aug_max_value'] = 0
+
+            update_log['images']["obs_aug_orig"] = []
+            update_log['images']["obs_aug_augmented"] = []
+
+        return update_log

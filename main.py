@@ -152,7 +152,7 @@ def setup_visualization(cfg: SimpleNamespace):
         return None, None
 
 
-def _get_curriculum_args(cfg: SimpleNamespace, num_updates, tb_writer):
+def get_curriculum_args(cfg: SimpleNamespace, num_updates, tb_writer):
     curr_args = None
 
     if cfg.learning.curriculum.enable:
@@ -167,12 +167,12 @@ def _get_curriculum_args(cfg: SimpleNamespace, num_updates, tb_writer):
     return curr_args
 
 
-def _get_env_args(cfg):
+def get_env_args(cfg):
     env_kwargs = {"env_params_sampler_dict": cfg.env.params_file,
                   "data_folder_path": cfg.env.data_folder_path}
     return env_kwargs
 
-def _load_actor_critic_from_snapshot(snapshot_path):
+def load_actor_critic_from_snapshot(snapshot_path):
     if os.path.isabs(snapshot_path):
         load_data = torch.load(snapshot_path)
     else:
@@ -181,9 +181,9 @@ def _load_actor_critic_from_snapshot(snapshot_path):
     return actor_critic
 
 
-def _setup_actor_critic(cfg, envs):
+def setup_actor_critic(cfg, envs):
     if cfg.learning.rl.actor_critic.snapshot is not None:
-        return _load_actor_critic_from_snapshot(cfg.learning.rl.actor_critic.snapshot)
+        return load_actor_critic_from_snapshot(cfg.learning.rl.actor_critic.snapshot)
 
     if cfg.learning.rl.actor_critic.combi_policy:
         base_kwargs = {'recurrent': cfg.learning.rl.actor_critic.recurrent_policy,
@@ -202,7 +202,7 @@ def _setup_actor_critic(cfg, envs):
     return actor_critic
 
 
-def _setup_consistency_loss(cfg):
+def setup_consistency_loss(cfg):
     augmentation_loss_weight = cfg.learning.consistency_loss.loss_weight
 
     if cfg.learning.consistency_loss.loss_weight_function_params:
@@ -213,14 +213,14 @@ def _setup_consistency_loss(cfg):
     return augmentation_loss_weight, augmentation_loss_weight_function
 
 
-def _setup_a2c_agent(cfg, actor_critic):
+def setup_a2c_agent(cfg, actor_critic):
     agent = algo.A2C_ACKTR(actor_critic, cfg.learning.rl.value_loss_coef,
                            cfg.learning.rl.entropy_coef, lr=cfg.learning.optimizer.lr,
                            eps=cfg.learning.optimizer.eps, alpha=cfg.learning.optimizer.alpha,
                            max_grad_norm=cfg.learning.rl.max_grad_norm)
 
 
-def _setup_ppo_agent(cfg, actor_critic):
+def setup_ppo_agent(cfg, actor_critic):
     dataloader = None
     augmenter = None
     augmentation_loss_weight = 0.0
@@ -228,7 +228,7 @@ def _setup_ppo_agent(cfg, actor_critic):
     if cfg.learning.consistency_loss.enable:
         assert cfg.learning.consistency_loss.augmenter is not None
 
-        augmentation_loss_weight, augmentation_loss_weight_function = _setup_consistency_loss(cfg)
+        augmentation_loss_weight, augmentation_loss_weight_function = setup_consistency_loss(cfg)
 
         if cfg.learning.consistency_loss.dataset_folder is not None:
             dataset = ObsDataset(root_folder=cfg.learning.consistency_loss.dataset_folder,
@@ -308,7 +308,7 @@ def update_learning_rate(cfg, agent, update_step, num_updates, eval_episode_rewa
         agent.clip_param = cfg.learning.rl.ppo.clip_param * (1 - update_step / float(2 * num_updates))
 
 
-def _save_model(cfg, envs, actor_critic, current_update_step):
+def save_model(cfg, envs, actor_critic, current_update_step):
     save_path = os.path.join(cfg.save_dir, cfg.learning.rl.algo)
     try:
         os.makedirs(save_path)
@@ -331,7 +331,7 @@ def _save_model(cfg, envs, actor_critic, current_update_step):
     torch.save(save_model, os.path.join(save_path, cfg.env.name + "_" + str(current_update_step) + ".pt"))
 
 
-def _save_image(cfg, agent_train_images, tb_writer_img, current_update_step):
+def save_image(cfg, agent_train_images, tb_writer_img, current_update_step):
     # Save visualization of last training step
     if cfg.experiment.save_train_images and agent_train_images is not None:
         images = agent_train_images["obs"]
@@ -347,8 +347,8 @@ def _save_image(cfg, agent_train_images, tb_writer_img, current_update_step):
                                          image / 255.0, image_idx)
 
 
-def _eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir, tb_writer_img, tb_writer, log_file,
-                  total_num_steps):
+def eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir, tb_writer_img, tb_writer, log_file,
+                 total_num_steps):
     eval_steps = 32 if j < num_updates - 1 else 100
 
     env_args = {"env_params_sampler_dict": cfg.env.params_file,
@@ -432,9 +432,9 @@ def _eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir,
 
 def setup_agent(cfg, actor_critic):
     if cfg.learning.rl.algo == 'a2c':
-        return _setup_a2c_agent(cfg, actor_critic)
+        return setup_a2c_agent(cfg, actor_critic)
     elif cfg.learning.rl.algo == 'ppo':
-        return _setup_ppo_agent(cfg, actor_critic)
+        return setup_ppo_agent(cfg, actor_critic)
     elif cfg.learning.rl.algo == 'acktr':
         return algo.A2C_ACKTR(actor_critic, cfg.learning.rl.value_loss_coef,
                                cfg.learning.rl.entropy_coef, acktr=True)
@@ -451,8 +451,8 @@ def train(sysargs):
     device = setup_cuda(cfg)
 
     num_updates = int(cfg.env.num_env_steps) // cfg.globals.num_steps // cfg.globals.num_processes
-    curr_args = _get_curriculum_args(cfg, num_updates, tb_writer)
-    env_args = _get_env_args(cfg)
+    curr_args = get_curriculum_args(cfg, num_updates, tb_writer)
+    env_args = get_env_args(cfg)
 
     envs = make_vec_envs(cfg.env.name, cfg.globals.seed, cfg.globals.num_processes,
                          cfg.learning.rl.gamma, cfg.log_dir, cfg.env.add_timestep, device,
@@ -461,7 +461,7 @@ def train(sysargs):
                          normalize_obs=cfg.env.normalize_obs,
                          env_args=env_args)
 
-    actor_critic = _setup_actor_critic(cfg, envs)
+    actor_critic = setup_actor_critic(cfg, envs)
     actor_critic.to(device)
 
     obs = envs.reset()
@@ -484,9 +484,6 @@ def train(sysargs):
     # ======== Training loop
     start = time.time()
     for j in tqdm(range(num_updates), desc="Updates"):
-        num_regular_resets = 0
-        num_resets = 0
-
         # === Update LR
         update_learning_rate(cfg, agent, j, num_updates, eval_episode_rewards)
 
@@ -544,28 +541,13 @@ def train(sysargs):
 
         # Update agent
         rollouts.compute_returns(next_value, cfg.learning.rl.gae.enable, cfg.learning.rl.gamma, cfg.learning.rl.gae.tau)
-        value_loss, action_loss, dist_entropy, additional_data_after_update = agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, update_log = agent.update(rollouts)
         rollouts.after_update()
-
-        action_loss_original = additional_data_after_update[
-            "action_loss_original"] if "action_loss_original" in additional_data_after_update else None
-        action_loss_aug = additional_data_after_update[
-            "action_loss_aug"] if "action_loss_aug" in additional_data_after_update else None
-        action_loss_aug_weighted = additional_data_after_update[
-            "action_loss_aug_weighted"] if "action_loss_aug_weighted" in additional_data_after_update else None
-        grad_norm = additional_data_after_update[
-            "grad_norm"] if "grad_norm" in additional_data_after_update else None
-        action_max_value_aug = additional_data_after_update[
-            "action_max_value_aug"] if "action_max_value_aug" in additional_data_after_update else None
-        action_max_value = additional_data_after_update[
-            "action_max_value"] if "action_max_value" in additional_data_after_update else None
-        agent_train_images = additional_data_after_update[
-            "images"] if "images" in additional_data_after_update else None
 
         # save for every interval-th episode or for the last epoch
         if (j % cfg.experiment.save_interval == 0 or j == num_updates - 1) and cfg.save_dir != "":
-            _save_model(cfg, envs, actor_critic, j)
-            _save_image(cfg, agent_train_images, tb_writer_img, j)
+            save_model(cfg, envs, actor_critic, j)
+            save_image(cfg, update_log['images'], tb_writer_img, j)
 
         if j % cfg.experiment.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
@@ -587,8 +569,8 @@ def train(sysargs):
 
         if (cfg.experiment.eval_interval is not None and len(
                 episode_rewards) > 1 and j % cfg.experiment.eval_interval == 0):
-            _eval_episode(cfg, j, num_updates, actor_critic, device, envs, cfg.eval_log_dir, tb_writer_img, tb_writer,
-                          log_file, total_num_steps)
+            eval_episode(cfg, j, num_updates, actor_critic, device, envs, cfg.eval_log_dir, tb_writer_img, tb_writer,
+                         log_file, total_num_steps)
 
         if cfg.experiment.vis and j % cfg.experiment.vis_interval == 0:
             try:
@@ -603,15 +585,10 @@ def train(sysargs):
             tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
             tb_writer.add_scalar("training_success_rate", np.mean(train_success), total_num_steps)
             tb_writer.add_scalar("eprewmedian_steps", np.median(episode_rewards), total_num_steps)
-            tb_writer.add_scalar("dist_entropy", dist_entropy, total_num_steps)
-            tb_writer.add_scalar("action_loss_sum", action_loss, total_num_steps)
-            tb_writer.add_scalar("action_loss_original", action_loss_original, total_num_steps)
-            tb_writer.add_scalar("action_loss_augmented", action_loss_aug, total_num_steps)
-            tb_writer.add_scalar("action_loss_augmented_weighted", action_loss_aug_weighted, total_num_steps)
-            tb_writer.add_scalar("action_max_value_aug", action_max_value_aug, total_num_steps)
-            tb_writer.add_scalar("action_max_value", action_max_value, total_num_steps)
-            tb_writer.add_scalar("value_loss", value_loss, total_num_steps)
-            tb_writer.add_scalar("grad_norm", grad_norm, total_num_steps)
+
+            for scalar in update_log.keys():
+                if "image" not in scalar:
+                    tb_writer.add_scalar(scalar, update_log[scalar], total_num_steps)
 
         if cfg.tensorboard:
             tb_writer.flush()
