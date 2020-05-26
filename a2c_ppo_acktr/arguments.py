@@ -23,7 +23,7 @@ def get_args(sysargs):
                         help='Random seed (default: 1)')
     parser.add_argument('--globals.use-cuda', action='store_true', default=True,
                         help='Enables CUDA training')
-    parser.add_argument('--globals.cuda-deterministic', action='store_true', default=False,
+    parser.add_argument('--globals.cuda-deterministic', action='store_true', default=True,
                         help="Sets flags for determinism when using CUDA (potentially slow!)")
     parser.add_argument('--globals.num-processes', type=int, default=16,
                         help='How many training CPU processes to use (default: 16)')
