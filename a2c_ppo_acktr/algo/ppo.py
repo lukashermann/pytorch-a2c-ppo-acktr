@@ -46,12 +46,11 @@ class PPO():
 
         self.augmentation_loss_weight_function = augmentation_loss_weight_function
         if augmentation_loss_weight is not None:
-            # Define inner function which simply returns constant value
             self.augmentation_loss_weight = augmentation_loss_weight
-
-            def constanct_loss_weight(*args): return self.augmentation_loss_weight
-
-            self.augmentation_loss_weight_function = constanct_loss_weight
+            if self.augmentation_loss_weight_function is None:
+                # Define inner function which simply returns constant value
+                def constant_loss_weight_func(*args): return self.augmentation_loss_weight
+                self.augmentation_loss_weight_function = constant_loss_weight_func
         self.return_images = return_images
         self.current_num_steps = 0
 
@@ -64,8 +63,6 @@ class PPO():
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
                 advantages.std() + 1e-5)
-
-
 
         for e in tqdm(range(self.ppo_epoch), desc="PPO Epochs"):
             if self.actor_critic.is_recurrent:
@@ -124,7 +121,6 @@ class PPO():
                 if self.augmenter is not None:
                     action_loss.retain_grad()  # retain grad for norm calculation
                     action_loss_aug.retain_grad()
-
                     action_loss_aug_weighted = self.weight_augmentation_loss(step=self.current_num_steps,
                                                                              action_loss_aug=action_loss_aug)
                     action_loss_sum = action_loss + action_loss_aug_weighted
@@ -164,6 +160,8 @@ class PPO():
                     if augmenter_loss_data["action_aug_max_value"] >= update_log['action_aug_max_value']:
                         update_log['action_aug_max_value'] = augmenter_loss_data["action_aug_max_value"]
 
+                    update_log['action_loss_ratio'] += action_loss / action_loss_aug_weighted
+
                 max_actions_batch = torch.max(actions_batch)
                 if max_actions_batch >= update_log['action_max_value']:
                     update_log['action_max_value'] = max_actions_batch
@@ -178,6 +176,7 @@ class PPO():
         if self.augmenter is not None:
             update_log['action_loss_aug'] /= num_updates
             update_log['action_loss_aug_weighted'] /= num_updates
+            update_log['action_loss_ratio'] /= num_updates
 
         return update_log['value_loss'], update_log['action_loss'], update_log['dist_entropy'], update_log
 

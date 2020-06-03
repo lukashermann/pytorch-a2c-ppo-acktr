@@ -203,6 +203,13 @@ def setup_actor_critic(cfg, envs):
 
 
 def setup_consistency_loss(cfg):
+    """
+    Configures consistency loss parameters
+
+    :returns
+        augmentation_loss_weight
+        augmentation_loss_weight_function
+    """
     augmentation_loss_weight = cfg.learning.consistency_loss.loss_weight
 
     if cfg.learning.consistency_loss.loss_weight_function_params:
