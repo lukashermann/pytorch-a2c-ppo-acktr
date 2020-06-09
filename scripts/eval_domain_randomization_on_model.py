@@ -10,7 +10,7 @@ import random
 import sys
 
 import numpy as np
-from a2c_ppo_acktr.augmentation.randaugment import RandAugment
+from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_SMALL_RANGE, RandAugment
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from torchvision import transforms
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     experiment_env = build_env(grasping_env, normalize_obs=False)
 
     if use_randaugment:
-        rand_aug = RandAugment(num_augmentations=4, magnitude=0.0)
+        rand_aug = RandAugment(num_augmentations=3, magnitude=0.0, augmentation_list=AUGMENTATION_LIST_SMALL_RANGE)
         transforms = transforms.Compose([
             transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
             transforms.ToPILImage(),
@@ -187,7 +187,7 @@ if __name__ == '__main__':
                 ep_rews = 0
 
                 # Interact with the environment until episode is finished:
-                #   either max number of steps reached or sucess
+                #   either max number of steps reached or success
                 while not done:
                     # Evaluate
                     action = model.step(obs, done)
