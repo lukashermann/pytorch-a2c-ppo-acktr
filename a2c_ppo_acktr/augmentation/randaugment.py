@@ -8,11 +8,11 @@ import random
 
 import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
 import numpy as np
-import torch
 from PIL import Image
+from typing import List, Union
 
 
-class Augmentation(object):
+class Augmentation:
     def __init__(self, min_value=0.0, max_value=1.0):
         self.min_value = min_value
         self.max_value = max_value
@@ -66,8 +66,8 @@ class Augmentation(object):
 
 
 class ShearX(Augmentation):
-    def __init__(self):
-        super().__init__(0, 0.3)
+    def __init__(self, min_value=0.0, max_value=0.3):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -78,8 +78,8 @@ class ShearX(Augmentation):
 
 
 class ShearY(Augmentation):
-    def __init__(self):
-        super().__init__(0, 0.3)
+    def __init__(self, min_value=0.0, max_value=0.3):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -90,8 +90,8 @@ class ShearY(Augmentation):
 
 
 class TranslateX(Augmentation):
-    def __init__(self):
-        super().__init__(0, 0.45)
+    def __init__(self, min_value=0.0, max_value=0.45):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -103,8 +103,8 @@ class TranslateX(Augmentation):
 
 
 class TranslateY(Augmentation):
-    def __init__(self):
-        super().__init__(0, 0.45)
+    def __init__(self, min_value=0.0, max_value=0.45):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -116,8 +116,8 @@ class TranslateY(Augmentation):
 
 
 class Rotate(Augmentation):
-    def __init__(self):
-        super().__init__(0, 30)
+    def __init__(self, min_value=0, max_value=30):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -148,8 +148,8 @@ class Flip(Augmentation):
 
 
 class Solarize(Augmentation):
-    def __init__(self):
-        super().__init__(0, 256)
+    def __init__(self, min_value=0, max_value=256):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -157,8 +157,8 @@ class Solarize(Augmentation):
 
 
 class Posterize(Augmentation):
-    def __init__(self):
-        super().__init__(0, 4)
+    def __init__(self, min_value=0, max_value=4):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -167,8 +167,8 @@ class Posterize(Augmentation):
 
 
 class Contrast(Augmentation):
-    def __init__(self):
-        super().__init__(0.1, 1.9)
+    def __init__(self, min_value=0.1, max_value=1.9):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -176,8 +176,8 @@ class Contrast(Augmentation):
 
 
 class Color(Augmentation):
-    def __init__(self):
-        super().__init__(0.1, 1.9)
+    def __init__(self, min_value=0.1, max_value=1.9):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -185,8 +185,8 @@ class Color(Augmentation):
 
 
 class Brightness(Augmentation):
-    def __init__(self):
-        super().__init__(0.1, 1.9)
+    def __init__(self, min_value=0.1, max_value=1.9):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -194,8 +194,8 @@ class Brightness(Augmentation):
 
 
 class Sharpness(Augmentation):
-    def __init__(self):
-        super().__init__(0.1, 1.9)
+    def __init__(self, min_value=0.1, max_value=1.9):
+        super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -203,8 +203,8 @@ class Sharpness(Augmentation):
 
 
 class Cutout(Augmentation):
-    def __init__(self):
-        super().__init__(0.0, 0.2)
+    def __init__(self, min_value=0.0, max_value=0.2):
+        super().__init__(min_value, max_value)
 
     def cutoutAbs(self, img, v):  # [0, 60] => percentage: [0, 0.2]
         # assert 0 <= v <= 20
@@ -240,11 +240,18 @@ class Identity(Augmentation):
 
 
 # List taken from RandAugment Paper
-AUGMENTATION_LIST = [Identity(), AutoContrast(), Equalize(),
-                     Rotate(), Solarize(), Color(),
-                     Posterize(), Contrast(), Brightness(),
-                     Sharpness(), ShearX(), ShearY(),
-                     TranslateX(), TranslateY()]
+AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
+                             Rotate(), Solarize(), Color(),
+                             Posterize(), Contrast(), Brightness(),
+                             Sharpness(), ShearX(), ShearY(),
+                             TranslateX(), TranslateY()]
+
+AUGMENTATION_LIST_SMALL_RANGE = [Identity(), AutoContrast(), Equalize(),
+                                 Rotate(max_value=10), Solarize(min_value=128, max_value=256), Color(),
+                                 Posterize(min_value=2, max_value=4), Contrast(min_value=0.8, max_value=1.2),
+                                 Brightness(min_value=0.8, max_value=1.2),
+                                 Sharpness(), ShearX(max_value=0.1), ShearY(max_value=0.1),
+                                 TranslateX(max_value=0.1), TranslateY(max_value=0.1)]
 
 
 class RandAugment:
@@ -252,8 +259,9 @@ class RandAugment:
     Randomly choose specified number of augmentations and apply them sequentially with specified magnitude.
     """
 
-    def __init__(self, num_augmentations: int = 1, magnitude: float = 0.0, augmentation_list=AUGMENTATION_LIST,
-                 min_magnitude=0.0, max_magnitude=1.0):
+    def __init__(self, num_augmentations: int = 1, magnitude: float = 0.0,
+                 augmentation_list: List = AUGMENTATION_LIST_DEFAULT,
+                 min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0):
         """
         Args:
             num_augmentations: Number of augmentation transformations to apply sequentially.
@@ -273,7 +281,7 @@ class RandAugment:
         self.__magnitude = None
         self.set_magnitude(magnitude)
 
-    def set_magnitude(self, magnitude):
+    def set_magnitude(self, magnitude: Union[float, int]):
         """
         Sets the magnitude for augmentations.
         Args:
@@ -300,12 +308,12 @@ class RandAugment:
         normalized_magnitude = (magnitude - self.__min_magnitude) / (self.__max_magnitude - self.__min_magnitude)
         self.__magnitude = normalized_magnitude
 
-    def __call__(self, img):
+    def __call__(self, img: PIL.Image) -> PIL.Image:
         augs = random.choices(self.augment_list, k=self.num_augmentations)
         for augmentation in augs:
             aug_magnitude = augmentation.scale_magnitude_to_aug_range(magnitude=self.magnitude())
             img = augmentation(img, aug_magnitude)
         return img
 
-    def magnitude(self):
+    def magnitude(self) -> float:
         return self.__magnitude
