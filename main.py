@@ -172,6 +172,7 @@ def get_env_args(cfg):
                   "data_folder_path": cfg.env.data_folder_path}
     return env_kwargs
 
+
 def load_actor_critic_from_snapshot(snapshot_path):
     if os.path.isabs(snapshot_path):
         load_data = torch.load(snapshot_path)
@@ -250,13 +251,25 @@ def setup_ppo_agent(cfg, actor_critic):
             dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, shuffle=True,
                                     num_workers=0, drop_last=True)
 
+        # TODO: Refactor to be a proper parameter instead of hardcoded value
+        cfg.learning.consistency_loss.augmenter.transformer = "randaugment"
+        if cfg.learning.consistency_loss.augmenter.transformer == "randaugment":
+            transformer = "randaugment"
+            transformer_args = {
+                "num_augmentations": 3,
+                "magnitude": 0.3
+            }
+        else:
+            transformer = "color_transformer"
+            transformer_args = {"hue": 0}
+
         augmenter = augmenters.get_augmenter_by_name(cfg.learning.consistency_loss.augmenter,
                                                      augmenter_args={
                                                          "use_cnn_loss": cfg.learning.consistency_loss.use_cnn_loss,
                                                          "clip_aug_actions": cfg.learning.consistency_loss.clip_aug_actions,
-                                                         "transformer": "color_transformer",
-                                                         "transformer_args": {
-                                                             "hue": 0}})
+                                                         "transformer": transformer,
+                                                         "transformer_args": transformer_args
+                                                     })
 
     agent = algo.PPO(actor_critic, cfg.learning.rl.ppo.clip_param, cfg.learning.rl.ppo.epoch,
                      cfg.globals.num_mini_batch,
@@ -444,7 +457,8 @@ def setup_agent(cfg, actor_critic):
         return setup_ppo_agent(cfg, actor_critic)
     elif cfg.learning.rl.algo == 'acktr':
         return algo.A2C_ACKTR(actor_critic, cfg.learning.rl.value_loss_coef,
-                               cfg.learning.rl.entropy_coef, acktr=True)
+                              cfg.learning.rl.entropy_coef, acktr=True)
+
 
 def train(sysargs):
     cfg = get_args(sysargs[1:])
@@ -476,15 +490,7 @@ def train(sysargs):
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=cfg.learning.curriculum.rew_q_len)
-    # curr_episode_rewards = deque(maxlen=args.rew_q_len)
-    # reg_episode_rewards = deque(maxlen=args.rew_q_len)
-    eval_reg_episode_rewards = deque(maxlen=32)
     train_success = deque(maxlen=cfg.learning.curriculum.rew_q_len)
-    # curr_success = deque(maxlen=args.rew_q_len)
-    # reg_success = deque(maxlen=args.rew_q_len)
-    # difficulty_cur = 0
-    # difficulty_reg = 0
-    # incr = args.incr
     eval_episode_rewards = []
     agent = setup_agent(cfg, actor_critic)
 

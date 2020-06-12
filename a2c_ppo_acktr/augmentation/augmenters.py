@@ -1,4 +1,5 @@
 import torch
+from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_SMALL_RANGE, RandAugment
 from torch import Tensor
 from torch import stack as torch_stack
 from torch.distributions import Transform
@@ -17,8 +18,21 @@ def get_augmenter_by_name(name, **kwargs):
 def get_transformer_by_name(name, **kwargs):
     if name == "color_transformer":
         return create_color_transformer(**kwargs)
+    if name == "randaugment_weak":
+        return create_randaugment_transformer(**kwargs)
     else:
         raise ValueError("Invalid Transformer: {}".format(name))
+
+
+def create_randaugment_transformer(num_augmentations=3, magnitude=0.3, augmentation_list=AUGMENTATION_LIST_SMALL_RANGE):
+    rand_aug = RandAugment(num_augmentations=num_augmentations, magnitude=magnitude, augmentation_list=augmentation_list)
+    return transforms.Compose([
+        transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
+        transforms.ToPILImage(),
+        rand_aug,
+        transforms.ToTensor(),
+        transforms.Lambda(lambda img: img * 255.0),  # TODO: Change obs range to [0, 1]
+    ])
 
 
 def create_color_transformer(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5):
@@ -26,8 +40,6 @@ def create_color_transformer(brightness=0.5, contrast=0.5, saturation=0.5, hue=0
     Creates transformer for randomly changing the colors of the input image
     :return:
     """
-
-    # TODO: Checkout kornia for image transforms on GPU (https://github.com/kornia/kornia)
     return transforms.Compose([
         # CIFAR10Policy(),
         transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
