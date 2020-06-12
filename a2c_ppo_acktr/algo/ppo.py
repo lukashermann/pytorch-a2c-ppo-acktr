@@ -197,6 +197,7 @@ class PPO():
             'dist_entropy': 0,
             'total_norm': 0,
             'grad_norm': 0,
+            'action_loss_ratio': 0,
             'images': {"obs": []}
         }
 
