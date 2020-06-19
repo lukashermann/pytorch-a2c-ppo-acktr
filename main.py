@@ -228,6 +228,34 @@ def setup_a2c_agent(cfg, actor_critic):
                            max_grad_norm=cfg.learning.rl.max_grad_norm)
 
 
+def load_transfomer_and_args(args_path):
+    with open(args_path) as file:
+        # The FullLoader parameter handles the conversion from YAML
+        # scalar values to Python the dictionary format
+        tranformer_data = yaml.load(file, Loader=yaml.FullLoader)
+        transformer_name = tranformer_data["transformer"]["type"]
+        transformer_args = tranformer_data["transformer"]["args"]
+        transformer = augmenters.get_transformer_by_name(transformer_name, **transformer_args)
+        return transformer
+
+
+def setup_augmenter(cfg):
+    if cfg.learning.consistency_loss.transformer.args_path is not None:
+        transformer = load_transfomer_and_args(cfg.learning.consistency_loss.transformer.args_path)
+    else:
+        # Default argument for backward compatibility
+        transformer_args = {"hue": 0}
+        transformer = augmenters.get_transformer_by_name("color_transformer", transformer_args)
+
+    augmenter = augmenters.get_augmenter_by_name(cfg.learning.consistency_loss.augmenter,
+                                                 augmenter_args={
+                                                     "use_cnn_loss": cfg.learning.consistency_loss.use_cnn_loss,
+                                                     "clip_aug_actions": cfg.learning.consistency_loss.clip_aug_actions,
+                                                     "transformer": transformer
+                                                 })
+    return augmenter
+
+
 def setup_ppo_agent(cfg, actor_critic):
     dataloader = None
     augmenter = None
@@ -236,6 +264,7 @@ def setup_ppo_agent(cfg, actor_critic):
     if cfg.learning.consistency_loss.enable:
         assert cfg.learning.consistency_loss.augmenter is not None
 
+        augmenter = setup_augmenter(cfg)
         augmentation_loss_weight, augmentation_loss_weight_function = setup_consistency_loss(cfg)
 
         if cfg.learning.consistency_loss.dataset_folder is not None:
@@ -250,26 +279,6 @@ def setup_ppo_agent(cfg, actor_critic):
                 data_loader_batch_size = int(cfg.learning.consistency_loss.dataloader_batch_size)
             dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, shuffle=True,
                                     num_workers=0, drop_last=True)
-
-        # TODO: Refactor to be a proper parameter instead of hardcoded value
-        cfg.learning.consistency_loss.augmenter.transformer = "randaugment"
-        if cfg.learning.consistency_loss.augmenter.transformer == "randaugment":
-            transformer = "randaugment"
-            transformer_args = {
-                "num_augmentations": 3,
-                "magnitude": 0.3
-            }
-        else:
-            transformer = "color_transformer"
-            transformer_args = {"hue": 0}
-
-        augmenter = augmenters.get_augmenter_by_name(cfg.learning.consistency_loss.augmenter,
-                                                     augmenter_args={
-                                                         "use_cnn_loss": cfg.learning.consistency_loss.use_cnn_loss,
-                                                         "clip_aug_actions": cfg.learning.consistency_loss.clip_aug_actions,
-                                                         "transformer": transformer,
-                                                         "transformer_args": transformer_args
-                                                     })
 
     agent = algo.PPO(actor_critic, cfg.learning.rl.ppo.clip_param, cfg.learning.rl.ppo.epoch,
                      cfg.globals.num_mini_batch,

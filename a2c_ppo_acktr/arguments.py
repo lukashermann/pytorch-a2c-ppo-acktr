@@ -125,6 +125,9 @@ def get_args(sysargs):
                         help='Specifies which transformer is to be used for augmenting the data for'
                              'calculating the augmentation loss during training. '
                              'Default: color_transformer')
+    parser.add_argument('--learning.consistency_loss.transformer.args_path', type=str, default=None,
+                        help='Path to .yaml file containing transformer arguments. If not set, some default '
+                             'values will be applied.')
     parser.add_argument('--learning.consistency_loss.dataset-folder', default=None,
                         help="Root folder containing dataset data")
     parser.add_argument('--learning.consistency_loss.dataloader-batch-size', default='same',

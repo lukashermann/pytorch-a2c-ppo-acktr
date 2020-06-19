@@ -18,7 +18,7 @@ def get_augmenter_by_name(name, **kwargs):
 def get_transformer_by_name(name, **kwargs):
     if name == "color_transformer":
         return create_color_transformer(**kwargs)
-    if name == "randaugment_weak":
+    if name == "randaugment":
         return create_randaugment_transformer(**kwargs)
     else:
         raise ValueError("Invalid Transformer: {}".format(name))
@@ -68,9 +68,8 @@ class TransformsAugmenter(Augmenter):
 
         assert transformer is not None
 
-        transformer_args = kwargs["transformer_args"] if "transformer_args" in kwargs else None
-
         if type(transformer) == str:
+            transformer_args = kwargs["transformer_args"] if "transformer_args" in kwargs else None
             self.transformer = get_transformer_by_name(transformer, **transformer_args)
         else:
             self.transformer = transformer
