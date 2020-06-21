@@ -13,7 +13,7 @@ from typing import List, Union
 
 
 class Augmentation:
-    def __init__(self, min_value=0.0, max_value=1.0):
+    def __init__(self, min_value=0.0, max_value=1.0, is_symmetric=None, randomize_sign_threshold=0.5):
         self.min_value = min_value
         self.max_value = max_value
 
@@ -25,20 +25,22 @@ class Augmentation:
 
         Returns:
             magnitude in the range of the augmentation
-        >>> augmentation = Augmentation(-1.0, 1.0)
+        >>> augmentation = Augmentation(0.0, 10.0)
         >>> augmentation.scale_magnitude_to_aug_range(0.5)
+        5.0
+        >>> augmentation.scale_magnitude_to_aug_range(1.0)
+        10.0
+        >>> augmentation.scale_magnitude_to_aug_range(0.0)
         0.0
+        >>> augmentation = Augmentation(-1, 1, is_symmetric=True)
+        >>> augmentation.scale_magnitude_to_aug_range(0.0)
+        0.0
+        >>> augmentation.scale_magnitude_to_aug_range(0.5)
+        0.5
         >>> augmentation.scale_magnitude_to_aug_range(1.0)
         1.0
-        >>> augmentation.scale_magnitude_to_aug_range(0.0)
-        -1.0
-        >>> augmentation = Augmentation(5, 10)
-        >>> augmentation.scale_magnitude_to_aug_range(0.5)
-        7.5
-        >>> augmentation.scale_magnitude_to_aug_range(0.0)
-        5.0
         """
-        return magnitude * float(self.max_value - self.min_value) + self.min_value
+        return sign * magnitude * float(self.max_value - self.min_value) + self.min_value
 
     def __call__(self, img: PIL.Image, magnitude):
         """
@@ -65,45 +67,57 @@ class Augmentation:
         assert self.min_value <= magnitude <= self.max_value
 
 
-class ShearX(Augmentation):
-    def __init__(self, min_value=0.0, max_value=0.3):
+class SymmetricAugmentation(Augmentation):
+    """
+    Augmentations of this type will be scaled from mean(min_value, max_value) to max_value with a random sign flip
+    """
+    def __init__(self, min_value, max_value, randomize_sign_threshold=0.5):
+        super().__init__(min_value, max_value)
+        self.randomize_sign_threshold = randomize_sign_threshold
+
+    def scale_magnitude_to_aug_range(self, magnitude):
+        lower_value = self.min_value
+        lower_value = np.mean((self.min_value, self.max_value))
+
+        # Randomize sign for symmetric augmentations
+        sign = 1
+        rand = random.random()
+        if rand > self.randomize_sign_threshold:
+            sign = -1
+        return sign * magnitude * float(self.max_value - lower_value) + lower_value
+
+
+class ShearX(SymmetricAugmentation):
+    def __init__(self, min_value=-0.3, max_value=0.3):
         super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
-
-        if random.random() > 0.5:
-            magnitude = -magnitude
         return img.transform(img.size, PIL.Image.AFFINE, (1, magnitude, 0, 0, 1, 0))
 
 
-class ShearY(Augmentation):
-    def __init__(self, min_value=0.0, max_value=0.3):
+class ShearY(SymmetricAugmentation):
+    def __init__(self, min_value=-0.3, max_value=0.3):
         super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
-
-        if random.random() > 0.5:
-            magnitude = -magnitude
         return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, magnitude, 1, 0))
 
 
-class TranslateX(Augmentation):
-    def __init__(self, min_value=0.0, max_value=0.45):
+class TranslateX(SymmetricAugmentation):
+    def __init__(self, min_value=-0.45, max_value=0.45):
         super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
 
-        if random.random() > 0.5:
-            magnitude = -magnitude
         magnitude = magnitude * img.size[0]
         return img.transform(img.size, PIL.Image.AFFINE, (1, 0, magnitude, 0, 1, 0))
 
 
-class TranslateY(Augmentation):
-    def __init__(self, min_value=0.0, max_value=0.45):
+class TranslateY(SymmetricAugmentation):
+    def __init__(self, min_value=-0.45, max_value=0.45):
         super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
@@ -115,8 +129,8 @@ class TranslateY(Augmentation):
         return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, magnitude))
 
 
-class Rotate(Augmentation):
-    def __init__(self, min_value=0, max_value=30):
+class Rotate(SymmetricAugmentation):
+    def __init__(self, min_value=-30, max_value=30):
         super().__init__(min_value, max_value)
 
     def __call__(self, img, magnitude):
@@ -166,7 +180,7 @@ class Posterize(Augmentation):
         return PIL.ImageOps.posterize(img, magnitude)
 
 
-class Contrast(Augmentation):
+class Contrast(SymmetricAugmentation):
     def __init__(self, min_value=0.1, max_value=1.9):
         super().__init__(min_value, max_value)
 
@@ -175,7 +189,7 @@ class Contrast(Augmentation):
         return PIL.ImageEnhance.Contrast(img).enhance(magnitude)
 
 
-class Color(Augmentation):
+class Color(SymmetricAugmentation):
     def __init__(self, min_value=0.1, max_value=1.9):
         super().__init__(min_value, max_value)
 
@@ -184,7 +198,7 @@ class Color(Augmentation):
         return PIL.ImageEnhance.Color(img).enhance(magnitude)
 
 
-class Brightness(Augmentation):
+class Brightness(SymmetricAugmentation):
     def __init__(self, min_value=0.1, max_value=1.9):
         super().__init__(min_value, max_value)
 
@@ -193,7 +207,7 @@ class Brightness(Augmentation):
         return PIL.ImageEnhance.Brightness(img).enhance(magnitude)
 
 
-class Sharpness(Augmentation):
+class Sharpness(SymmetricAugmentation):
     def __init__(self, min_value=0.1, max_value=1.9):
         super().__init__(min_value, max_value)
 
@@ -247,11 +261,11 @@ AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
                              TranslateX(), TranslateY()]
 
 AUGMENTATION_LIST_SMALL_RANGE = [Identity(), AutoContrast(), Equalize(),
-                                 Rotate(max_value=10), Solarize(min_value=128, max_value=256), Color(),
+                                 Rotate(min_value=-10, max_value=10), Solarize(min_value=128, max_value=256), Color(),
                                  Posterize(min_value=2, max_value=4), Contrast(min_value=0.8, max_value=1.2),
                                  Brightness(min_value=0.8, max_value=1.2),
-                                 Sharpness(), ShearX(max_value=0.1), ShearY(max_value=0.1),
-                                 TranslateX(max_value=0.1), TranslateY(max_value=0.1)]
+                                 Sharpness(), ShearX(min_value=-0.1, max_value=0.1), ShearY(min_value=-0.1, max_value=0.1),
+                                 TranslateX(min_value=-0.1, max_value=0.1), TranslateY(min_value=-0.1, max_value=0.1)]
 
 
 class RandAugment:
@@ -267,7 +281,7 @@ class RandAugment:
             num_augmentations: Number of augmentation transformations to apply sequentially.
             magnitude: Magnitude for all the transformations [float between 0.0..1.0].
             augmentation_list: list of augmentations to be applied
-            min_magnitude: defines the minimum magnitude used for augmentations
+            min_magnitude: defines the minimum magnitude used for augmentations.
             max_magnitude: defines the maximum magnitude used for augmentations
         """
         self.num_augmentations = num_augmentations
@@ -283,7 +297,7 @@ class RandAugment:
 
     def set_magnitude(self, magnitude: Union[float, int]):
         """
-        Sets the magnitude for augmentations.
+        Sets the magnitude for augmentations. Will be normalized from [min_magnitude, max_magnitude] to [0.0...1.0]
         Args:
             magnitude: value between min_magnitude and max_magnitude
 
@@ -309,6 +323,8 @@ class RandAugment:
         self.__magnitude = normalized_magnitude
 
     def __call__(self, img: PIL.Image) -> PIL.Image:
+        # TODO: Implement weighted random choice
+        # https://stackoverflow.com/questions/3679694/a-weighted-version-of-random-choice
         augs = random.choices(self.augment_list, k=self.num_augmentations)
         for augmentation in augs:
             aug_magnitude = augmentation.scale_magnitude_to_aug_range(magnitude=self.magnitude())
