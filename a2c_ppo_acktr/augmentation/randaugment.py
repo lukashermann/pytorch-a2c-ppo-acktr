@@ -13,9 +13,21 @@ from typing import List, Union
 
 
 class Augmentation:
-    def __init__(self, min_value=0.0, max_value=1.0, is_symmetric=None, randomize_sign_threshold=0.5):
+    pass
+
+
+class RangedAugmentation(Augmentation):
+    def __init__(self, min_value=0.0, max_value=1.0, reverse=False):
+        """
+        Augmentation with upper and lower range, and optional reverted scale.
+        Args:
+            min_value: minimum value for the augmentation
+            max_value: maximum value for the augmentation
+            reverse: if True, magnitude is reversed for min/max value.
+        """
         self.min_value = min_value
         self.max_value = max_value
+        self.reverse = reverse
 
     def scale_magnitude_to_aug_range(self, magnitude):
         """
@@ -25,22 +37,24 @@ class Augmentation:
 
         Returns:
             magnitude in the range of the augmentation
-        >>> augmentation = Augmentation(0.0, 10.0)
+        >>> augmentation = RangedAugmentation(0.0, 10.0)
         >>> augmentation.scale_magnitude_to_aug_range(0.5)
         5.0
         >>> augmentation.scale_magnitude_to_aug_range(1.0)
         10.0
         >>> augmentation.scale_magnitude_to_aug_range(0.0)
         0.0
-        >>> augmentation = Augmentation(-1, 1, is_symmetric=True)
+        >>> augmentation = RangedAugmentation(0, 10, reverse=True)
         >>> augmentation.scale_magnitude_to_aug_range(0.0)
+        10.0
+        >>> augmentation.scale_magnitude_to_aug_range(1.0)
         0.0
         >>> augmentation.scale_magnitude_to_aug_range(0.5)
-        0.5
-        >>> augmentation.scale_magnitude_to_aug_range(1.0)
-        1.0
+        5.0
         """
-        return sign * magnitude * float(self.max_value - self.min_value) + self.min_value
+        if self.reverse:
+            magnitude = 1.0 - magnitude
+        return magnitude * float(self.max_value - self.min_value) + self.min_value
 
     def __call__(self, img: PIL.Image, magnitude):
         """
@@ -67,7 +81,7 @@ class Augmentation:
         assert self.min_value <= magnitude <= self.max_value
 
 
-class SymmetricAugmentation(Augmentation):
+class SymmetricAugmentation(RangedAugmentation):
     """
     Augmentations of this type will be scaled from mean(min_value, max_value) to max_value with a random sign flip
     """
@@ -76,7 +90,6 @@ class SymmetricAugmentation(Augmentation):
         self.randomize_sign_threshold = randomize_sign_threshold
 
     def scale_magnitude_to_aug_range(self, magnitude):
-        lower_value = self.min_value
         lower_value = np.mean((self.min_value, self.max_value))
 
         # Randomize sign for symmetric augmentations
@@ -161,18 +174,18 @@ class Flip(Augmentation):
         return PIL.ImageOps.mirror(img)
 
 
-class Solarize(Augmentation):
-    def __init__(self, min_value=0, max_value=256):
-        super().__init__(min_value, max_value)
+class Solarize(RangedAugmentation):
+    def __init__(self, min_value=0, max_value=254):
+        super().__init__(min_value, max_value, reverse=True)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
         return PIL.ImageOps.solarize(img, magnitude)
 
 
-class Posterize(Augmentation):
-    def __init__(self, min_value=0, max_value=4):
-        super().__init__(min_value, max_value)
+class Posterize(RangedAugmentation):
+    def __init__(self, min_value=4, max_value=8):
+        super().__init__(min_value, max_value, reverse=True)
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
@@ -216,7 +229,7 @@ class Sharpness(SymmetricAugmentation):
         return PIL.ImageEnhance.Sharpness(img).enhance(magnitude)
 
 
-class Cutout(Augmentation):
+class Cutout(RangedAugmentation):
     def __init__(self, min_value=0.0, max_value=0.2):
         super().__init__(min_value, max_value)
 
@@ -262,7 +275,7 @@ AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
 
 AUGMENTATION_LIST_SMALL_RANGE = [Identity(), AutoContrast(), Equalize(),
                                  Rotate(min_value=-10, max_value=10), Solarize(min_value=128, max_value=256), Color(),
-                                 Posterize(min_value=2, max_value=4), Contrast(min_value=0.8, max_value=1.2),
+                                 Posterize(min_value=6, max_value=8), Contrast(min_value=0.8, max_value=1.2),
                                  Brightness(min_value=0.8, max_value=1.2),
                                  Sharpness(), ShearX(min_value=-0.1, max_value=0.1), ShearY(min_value=-0.1, max_value=0.1),
                                  TranslateX(min_value=-0.1, max_value=0.1), TranslateY(min_value=-0.1, max_value=0.1)]

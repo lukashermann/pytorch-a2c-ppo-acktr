@@ -3,7 +3,7 @@ import unittest
 from PIL import ImageChops, Image
 
 from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_DEFAULT, AUGMENTATION_LIST_SMALL_RANGE, Brightness, \
-    Rotate, SymmetricAugmentation
+    RangedAugmentation, Rotate, SymmetricAugmentation
 
 
 def calculate_image_differences_rms(image_1, image_2):
@@ -23,6 +23,14 @@ def get_symmetric_augs_small_range():
     return [aug for aug in AUGMENTATION_LIST_SMALL_RANGE if isinstance(aug, SymmetricAugmentation)]
 
 
+def get_ranged_augs():
+    return [aug for aug in AUGMENTATION_LIST_DEFAULT if isinstance(aug, RangedAugmentation)]
+
+
+def get_ranged_augs_small_range():
+    return [aug for aug in AUGMENTATION_LIST_SMALL_RANGE if isinstance(aug, RangedAugmentation)]
+
+
 class RandAugmentTestCase(unittest.TestCase):
     def setUp(self):
         self.test_image = Image.open("data/test.png")
@@ -39,6 +47,24 @@ class RandAugmentTestCase(unittest.TestCase):
     def test_symmetric_augmentation_small_range_magnitude_0_gives_identity(self):
         symmetric_augs = get_symmetric_augs_small_range()
         for aug in symmetric_augs:
+            magnitude = aug.scale_magnitude_to_aug_range(0.0)
+            augmented_image = aug(self.test_image, magnitude)
+
+            diff = calculate_image_differences_rms(self.test_image, augmented_image)
+            self.assertEqual(0.0, diff)
+
+    def test_ranged_augmentation_magnitude_0_gives_identity(self):
+        ranged_augs = get_ranged_augs()
+        for aug in ranged_augs:
+            magnitude = aug.scale_magnitude_to_aug_range(0.0)
+            augmented_image = aug(self.test_image, magnitude)
+
+            diff = calculate_image_differences_rms(self.test_image, augmented_image)
+            self.assertEqual(0.0, diff)
+
+    def test_ranged_augmentation_small_range_magnitude_0_gives_identity(self):
+        ranged_augs = get_ranged_augs_small_range()
+        for aug in ranged_augs:
             magnitude = aug.scale_magnitude_to_aug_range(0.0)
             augmented_image = aug(self.test_image, magnitude)
 
