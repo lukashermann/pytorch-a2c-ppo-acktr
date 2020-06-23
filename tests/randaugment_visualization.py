@@ -3,7 +3,8 @@ import argparse
 import numpy as np
 import os
 
-from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_DEFAULT, AUGMENTATION_LIST_SMALL_RANGE, RandAugment
+from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_DEFAULT, AUGMENTATION_LIST_SMALL_RANGE, \
+    RandAugment, StaticAugmentation
 
 
 def load_test_img(img_path):
@@ -42,7 +43,13 @@ if __name__ == '__main__':
 
     for augmentation in augmentation_list:
         for magnitude in np.linspace(0.0, 1.0, 10):
-            aug_magnitude = augmentation.scale_magnitude_to_aug_range(magnitude)
-            img = augmentation(test_img, aug_magnitude)
-            img.save(os.path.join(output_dir, "{}_{}_{}.png".format(os.path.basename(test_img_file),
-                                                                    augmentation.__class__.__name__, magnitude)))
+            if isinstance(augmentation, StaticAugmentation):
+                img = augmentation(test_img, magnitude)
+                img.save(os.path.join(output_dir, "{}_{}.png".format(os.path.basename(test_img_file),
+                                                                        augmentation.__class__.__name__)))
+                break
+            else:
+                aug_magnitude = augmentation.scale_magnitude_to_aug_range(magnitude)
+                img = augmentation(test_img, aug_magnitude)
+                img.save(os.path.join(output_dir, "{}_{}_{}.png".format(os.path.basename(test_img_file),
+                                                                        augmentation.__class__.__name__, magnitude)))

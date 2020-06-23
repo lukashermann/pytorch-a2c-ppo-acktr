@@ -15,7 +15,8 @@ from typing import List, Union
 
 class Augmentation(abc.ABC):
     """Augmentation base class"""
-    pass
+    def scale_magnitude_to_aug_range(self, magnitude):
+        pass
 
 
 class StaticAugmentation(Augmentation):
