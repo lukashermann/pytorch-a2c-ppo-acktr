@@ -9,10 +9,17 @@ import random
 import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
 import numpy as np
 from PIL import Image
+import abc
 from typing import List, Union
 
 
-class Augmentation:
+class Augmentation(abc.ABC):
+    """Augmentation base class"""
+    pass
+
+
+class StaticAugmentation(Augmentation):
+    """Base class for augmentations without magnitude"""
     pass
 
 
@@ -85,6 +92,7 @@ class SymmetricAugmentation(RangedAugmentation):
     """
     Augmentations of this type will be scaled from mean(min_value, max_value) to max_value with a random sign flip
     """
+
     def __init__(self, min_value, max_value, randomize_sign_threshold=0.5):
         super().__init__(min_value, max_value)
         self.randomize_sign_threshold = randomize_sign_threshold
@@ -98,6 +106,31 @@ class SymmetricAugmentation(RangedAugmentation):
         if rand > self.randomize_sign_threshold:
             sign = -1
         return sign * magnitude * float(self.max_value - lower_value) + lower_value
+
+
+class Identity(StaticAugmentation):
+    def __call__(self, img, _):
+        return img
+
+
+class AutoContrast(StaticAugmentation):
+    def __call__(self, img, _):
+        return PIL.ImageOps.autocontrast(img)
+
+
+class Invert(StaticAugmentation):
+    def __call__(self, img, _):
+        return PIL.ImageOps.invert(img)
+
+
+class Equalize(StaticAugmentation):
+    def __call__(self, img, _):
+        return PIL.ImageOps.equalize(img)
+
+
+class Flip(StaticAugmentation):
+    def __call__(self, img, _):
+        return PIL.ImageOps.mirror(img)
 
 
 class ShearX(SymmetricAugmentation):
@@ -154,45 +187,6 @@ class Rotate(SymmetricAugmentation):
         return img.rotate(magnitude)
 
 
-class AutoContrast(Augmentation):
-    def __call__(self, img, _):
-        return PIL.ImageOps.autocontrast(img)
-
-
-class Invert(Augmentation):
-    def __call__(self, img, _):
-        return PIL.ImageOps.invert(img)
-
-
-class Equalize(Augmentation):
-    def __call__(self, img, _):
-        return PIL.ImageOps.equalize(img)
-
-
-class Flip(Augmentation):
-    def __call__(self, img, _):
-        return PIL.ImageOps.mirror(img)
-
-
-class Solarize(RangedAugmentation):
-    def __init__(self, min_value=0, max_value=254):
-        super().__init__(min_value, max_value, reverse=True)
-
-    def __call__(self, img, magnitude):
-        super().__call__(img, magnitude)
-        return PIL.ImageOps.solarize(img, magnitude)
-
-
-class Posterize(RangedAugmentation):
-    def __init__(self, min_value=4, max_value=8):
-        super().__init__(min_value, max_value, reverse=True)
-
-    def __call__(self, img, magnitude):
-        super().__call__(img, magnitude)
-        magnitude = max(1, int(magnitude))
-        return PIL.ImageOps.posterize(img, magnitude)
-
-
 class Contrast(SymmetricAugmentation):
     def __init__(self, min_value=0.1, max_value=1.9):
         super().__init__(min_value, max_value)
@@ -229,6 +223,25 @@ class Sharpness(SymmetricAugmentation):
         return PIL.ImageEnhance.Sharpness(img).enhance(magnitude)
 
 
+class Solarize(RangedAugmentation):
+    def __init__(self, min_value=0, max_value=254):
+        super().__init__(min_value, max_value, reverse=True)
+
+    def __call__(self, img, magnitude):
+        super().__call__(img, magnitude)
+        return PIL.ImageOps.solarize(img, magnitude)
+
+
+class Posterize(RangedAugmentation):
+    def __init__(self, min_value=4, max_value=8):
+        super().__init__(min_value, max_value, reverse=True)
+
+    def __call__(self, img, magnitude):
+        super().__call__(img, magnitude)
+        magnitude = max(1, int(magnitude))
+        return PIL.ImageOps.posterize(img, magnitude)
+
+
 class Cutout(RangedAugmentation):
     def __init__(self, min_value=0.0, max_value=0.2):
         super().__init__(min_value, max_value)
@@ -261,11 +274,6 @@ class Cutout(RangedAugmentation):
         return self.cutout_abs(img, magnitude)
 
 
-class Identity(Augmentation):
-    def __call__(self, img, _):
-        return img
-
-
 # List taken from RandAugment Paper
 AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
                              Rotate(), Solarize(), Color(),
@@ -277,7 +285,8 @@ AUGMENTATION_LIST_SMALL_RANGE = [Identity(), AutoContrast(), Equalize(),
                                  Rotate(min_value=-10, max_value=10), Solarize(min_value=128, max_value=256), Color(),
                                  Posterize(min_value=6, max_value=8), Contrast(min_value=0.8, max_value=1.2),
                                  Brightness(min_value=0.8, max_value=1.2),
-                                 Sharpness(), ShearX(min_value=-0.1, max_value=0.1), ShearY(min_value=-0.1, max_value=0.1),
+                                 Sharpness(), ShearX(min_value=-0.1, max_value=0.1),
+                                 ShearY(min_value=-0.1, max_value=0.1),
                                  TranslateX(min_value=-0.1, max_value=0.1), TranslateY(min_value=-0.1, max_value=0.1)]
 
 
@@ -338,7 +347,7 @@ class RandAugment:
     def __call__(self, img: PIL.Image) -> PIL.Image:
         # TODO: Implement weighted random choice
         # https://stackoverflow.com/questions/3679694/a-weighted-version-of-random-choice
-        augs = random.choices(self.augment_list, k=self.num_augmentations)
+        augs = self.choose_augs_by_magnitude()
         for augmentation in augs:
             aug_magnitude = augmentation.scale_magnitude_to_aug_range(magnitude=self.magnitude())
             img = augmentation(img, aug_magnitude)
@@ -346,3 +355,51 @@ class RandAugment:
 
     def magnitude(self) -> float:
         return self.__magnitude
+
+    def choose_augs_by_magnitude(self):
+        return random.choices(self.augment_list, weights=self.get_augmentation_weights_for_magnitude(),
+                              k=self.num_augmentations)
+
+    def get_augmentation_weights_for_magnitude(self):
+        """
+        Returns: weights for augmentations, one weight for each augmentation in self.augment_list
+            The weight depends on the magnitude of randaugment. For magnitude -> 0.0 this method will return 0.0 weight
+            for augmentation which have no range. This will make sure that static augmentations (without magnitude) are
+            less common for small magnitudes. All augmentations are equally likely for magnitude == 1.
+        >>> randaugment = RandAugment(1, magnitude=0.0)
+        >>> randaugment.get_augmentation_weights_for_magnitude()
+        [0.0, 0.0, 0.0, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, \
+0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, \
+0.09090909090909091, 0.09090909090909091]
+        >>> randaugment = RandAugment(1, magnitude=1.0)
+        >>> randaugment.get_augmentation_weights_for_magnitude()
+        [0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
+0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
+0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142]
+        >>> randaugment = RandAugment(1, magnitude=0.5)
+        >>> randaugment.get_augmentation_weights_for_magnitude()
+        [0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
+0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
+0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142]
+        >>> randaugment = RandAugment(1, magnitude=0.2)
+        >>> randaugment.get_augmentation_weights_for_magnitude()
+        [0.02857142857142857, 0.02857142857142857, 0.02857142857142857, 0.08311688311688312, \
+0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312, \
+0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312]
+        """
+        # Extract all static / non-static augmentations
+        static_augs = np.array([aug for aug in self.augment_list if isinstance(aug, StaticAugmentation)])
+        non_static_augs = np.array([aug for aug in self.augment_list if isinstance(aug, RangedAugmentation)])
+
+        # Define maximum weight each augmentation can get
+        max_weight = 1.0 / len(self.augment_list)
+
+        # For magnitude < 0.5, use linear function to derive static weight
+        if self.magnitude() <= 0.5:
+            # f(x) = x * max_weight / 0.5 for x <= 0.5
+            static_weight = self.magnitude() * max_weight / 0.5
+            # Calculate other weights depending on static weight (makes sure result is a prob. distribution)
+            other_weight = (1 - (static_weight * len(static_augs))) / len(non_static_augs)
+            return [static_weight if isinstance(aug, StaticAugmentation) else other_weight for aug in self.augment_list]
+        else:
+            return np.full(len(self.augment_list), 1.0 / len(self.augment_list)).tolist()
