@@ -15,14 +15,15 @@ from typing import List, Union
 
 class Augmentation(abc.ABC):
     """Augmentation base class"""
-    def scale_magnitude_to_aug_range(self, magnitude):
+    def scale_magnitude_to_aug_range(self, magnitude=None):
         pass
 
 
 class StaticAugmentation(Augmentation):
     """Base class for augmentations without magnitude"""
-    pass
 
+    def __call__(self, img, _=None):
+        pass
 
 class RangedAugmentation(Augmentation):
     def __init__(self, min_value=0.0, max_value=1.0, reverse=False):
@@ -110,27 +111,27 @@ class SymmetricAugmentation(RangedAugmentation):
 
 
 class Identity(StaticAugmentation):
-    def __call__(self, img, _):
+    def __call__(self, img, _=None):
         return img
 
 
 class AutoContrast(StaticAugmentation):
-    def __call__(self, img, _):
+    def __call__(self, img, _=None):
         return PIL.ImageOps.autocontrast(img)
 
 
 class Invert(StaticAugmentation):
-    def __call__(self, img, _):
+    def __call__(self, img, _=None):
         return PIL.ImageOps.invert(img)
 
 
 class Equalize(StaticAugmentation):
-    def __call__(self, img, _):
+    def __call__(self, img, _=None):
         return PIL.ImageOps.equalize(img)
 
 
 class Flip(StaticAugmentation):
-    def __call__(self, img, _):
+    def __call__(self, img, _=None):
         return PIL.ImageOps.mirror(img)
 
 
@@ -283,7 +284,7 @@ AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
                              TranslateX(), TranslateY()]
 
 AUGMENTATION_LIST_SMALL_RANGE = [Identity(), AutoContrast(), Equalize(),
-                                 Rotate(min_value=-10, max_value=10), Solarize(min_value=128, max_value=256), Color(),
+                                 Rotate(min_value=-10, max_value=10), Solarize(min_value=128, max_value=254), Color(),
                                  Posterize(min_value=6, max_value=8), Contrast(min_value=0.8, max_value=1.2),
                                  Brightness(min_value=0.8, max_value=1.2),
                                  Sharpness(), ShearX(min_value=-0.1, max_value=0.1),
