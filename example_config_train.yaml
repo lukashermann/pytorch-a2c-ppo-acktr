@@ -59,6 +59,7 @@ learning:
     loss_weight: 1.0
     loss_weight_function_params:
     use_cnn_loss: false
+    use_action_loss_as_weight: false
     clip_aug_actions: false
 
 experiment:

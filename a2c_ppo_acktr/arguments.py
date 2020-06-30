@@ -12,11 +12,13 @@ class NoneableType(object):
             return self._type(value)
         return value
 
+
 def get_args(sysargs):
     parser = argparse.ArgumentParser(description='RL')
 
-    parser.add_argument('--config', help="Read configurations from file (will override all configurations which are passed "
-                                         "before this option)", action=argparse.ActionConfigFile)
+    parser.add_argument('--config',
+                        help="Read configurations from file (will override all configurations which are passed "
+                             "before this option)", action=argparse.ActionConfigFile)
 
     # Globals
     parser.add_argument('--globals.seed', type=int, default=1,
@@ -144,6 +146,9 @@ def get_args(sysargs):
     parser.add_argument('--learning.consistency_loss.clip-aug-actions', default=False, action="store_true",
                         help="If set, the action calculated in the augmentation loss will be clipped to "
                              "the action range used in the environment")
+    parser.add_argument('--learning.consistency_loss.use-action-loss-as-weight', default=False, action="store_true",
+                        help="If set, the consistency loss weight will be derived from the action loss "
+                             "by a moving average. Can be combined with loss_weight and /or loss_weight_function_params.")
 
     # experiment
     parser.add_argument('--experiment.num-bc-epochs', type=int, default=1000,

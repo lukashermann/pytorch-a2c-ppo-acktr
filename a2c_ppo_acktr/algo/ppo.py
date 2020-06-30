@@ -180,10 +180,11 @@ class PPO():
 
         return update_log['value_loss'], update_log['action_loss'], update_log['dist_entropy'], update_log
 
-    def weight_augmentation_loss(self, step, action_loss_aug, use_absolute_value=True):
+    def weight_augmentation_loss(self, step, action_loss, action_loss_aug, use_absolute_value=True):
         if self.augmentation_loss_weight_function:
-            factor = abs(self.augmentation_loss_weight_function(
-                step)) if use_absolute_value else self.augmentation_loss_weight_function(step)
+            factor = self.augmentation_loss_weight_function(step, action_loss)
+            if use_absolute_value:
+                factor = abs(factor)
             return factor * action_loss_aug
         else:
             return self.augmentation_loss_weight * action_loss_aug
