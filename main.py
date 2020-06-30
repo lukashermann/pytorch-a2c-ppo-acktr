@@ -24,6 +24,7 @@ from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.augmentation import augmenters
 from a2c_ppo_acktr.augmentation.datasets import ObsDataset
+from a2c_ppo_acktr.augmentation.weighting import FixedWeight, FunctionWeight, MovingAverageFromLossWeight
 from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.envs import make_vec_envs
 from a2c_ppo_acktr.model import Policy
@@ -211,14 +212,24 @@ def setup_consistency_loss(cfg):
         augmentation_loss_weight
         augmentation_loss_weight_function
     """
-    augmentation_loss_weight = cfg.learning.consistency_loss.loss_weight
+    consistency_loss_weight = cfg.learning.consistency_loss.loss_weight
 
-    if cfg.learning.consistency_loss.loss_weight_function_params:
-        params = np.load(cfg.learning.consistency_loss.loss_weight_function_params)
-        augmentation_loss_weight_function = np.poly1d(params)
+    if cfg.learning.consistency_loss.loss_weight_function_params is not None:
+        weight_function_params = np.load(cfg.learning.consistency_loss.loss_weight_function_params)
+        weight_function = np.poly1d(weight_function_params)
     else:
-        augmentation_loss_weight_function = None
-    return augmentation_loss_weight, augmentation_loss_weight_function
+        weight_function = None
+
+    if cfg.learning.consistency_loss.use_action_loss_as_weight:
+        weighter = MovingAverageFromLossWeight(with_fixed_weight=consistency_loss_weight,
+                                               with_loss_weight_function=weight_function)
+    elif cfg.learning.consistency_loss.loss_weight_function_params:
+        weighter = FunctionWeight(function=weight_function,
+                                  with_fixed_weight=cfg.learning.consistency_loss.loss_weight)
+    else:
+        weighter = FixedWeight(weight=cfg.learning.consistency_loss.loss_weight)
+
+    return weighter
 
 
 def setup_a2c_agent(cfg, actor_critic):
@@ -245,7 +256,7 @@ def setup_augmenter(cfg):
     else:
         # Default argument for backward compatibility
         transformer_args = {"hue": 0}
-        transformer = augmenters.get_transformer_by_name("color_transformer", transformer_args)
+        transformer = augmenters.get_transformer_by_name("color_transformer", **transformer_args)
 
     augmenter = augmenters.get_augmenter_by_name(cfg.learning.consistency_loss.augmenter,
                                                  augmenter_args={
@@ -265,7 +276,7 @@ def setup_ppo_agent(cfg, actor_critic):
         assert cfg.learning.consistency_loss.augmenter is not None
 
         augmenter = setup_augmenter(cfg)
-        augmentation_loss_weight, augmentation_loss_weight_function = setup_consistency_loss(cfg)
+        augmentation_loss_weight_function = setup_consistency_loss(cfg)
 
         if cfg.learning.consistency_loss.dataset_folder is not None:
             dataset = ObsDataset(root_folder=cfg.learning.consistency_loss.dataset_folder,
@@ -288,7 +299,6 @@ def setup_ppo_agent(cfg, actor_critic):
                      augmenter=augmenter,
                      return_images=cfg.experiment.save_train_images,
                      augmentation_data_loader=dataloader,
-                     augmentation_loss_weight=augmentation_loss_weight,
                      augmentation_loss_weight_function=augmentation_loss_weight_function)
     return agent
 

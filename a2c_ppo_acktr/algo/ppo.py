@@ -24,7 +24,6 @@ class PPO():
                  augmenter: Augmenter = None,
                  return_images: bool = False,
                  augmentation_data_loader=None,
-                 augmentation_loss_weight=None,
                  augmentation_loss_weight_function=None):
 
         self.actor_critic = actor_critic
@@ -44,13 +43,10 @@ class PPO():
         self.augmenter = augmenter
         self.augmemtation_data_loader = augmentation_data_loader
 
+        if self.augmenter is not None:
+            assert augmentation_loss_weight_function is not None
         self.augmentation_loss_weight_function = augmentation_loss_weight_function
-        if augmentation_loss_weight is not None:
-            self.augmentation_loss_weight = augmentation_loss_weight
-            if self.augmentation_loss_weight_function is None:
-                # Define inner function which simply returns constant value
-                def constant_loss_weight_func(*args): return self.augmentation_loss_weight
-                self.augmentation_loss_weight_function = constant_loss_weight_func
+
         self.return_images = return_images
         self.current_num_steps = 0
 
@@ -122,6 +118,7 @@ class PPO():
                     action_loss.retain_grad()  # retain grad for norm calculation
                     action_loss_aug.retain_grad()
                     action_loss_aug_weighted = self.weight_augmentation_loss(step=self.current_num_steps,
+                                                                             action_loss=action_loss,
                                                                              action_loss_aug=action_loss_aug)
                     action_loss_sum = action_loss + action_loss_aug_weighted
                 else:
@@ -181,13 +178,7 @@ class PPO():
         return update_log['value_loss'], update_log['action_loss'], update_log['dist_entropy'], update_log
 
     def weight_augmentation_loss(self, step, action_loss, action_loss_aug, use_absolute_value=True):
-        if self.augmentation_loss_weight_function:
-            factor = self.augmentation_loss_weight_function(step, action_loss)
-            if use_absolute_value:
-                factor = abs(factor)
-            return factor * action_loss_aug
-        else:
-            return self.augmentation_loss_weight * action_loss_aug
+        return self.augmentation_loss_weight_function(step, action_loss) * action_loss_aug
 
     def init_update_logging(self, with_augmentation=False):
         update_log = {
