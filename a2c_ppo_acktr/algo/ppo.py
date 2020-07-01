@@ -117,7 +117,7 @@ class PPO():
                 if self.augmenter is not None:
                     action_loss.retain_grad()  # retain grad for norm calculation
                     action_loss_aug.retain_grad()
-                    action_loss_aug_weight = self.augmentation_loss_weight_function(self.current_num_steps, action_loss)
+                    action_loss_aug_weight = self.augmentation_loss_weight_function(self.current_num_steps, action_loss.item())
                     action_loss_aug_weighted = action_loss_aug_weight * action_loss_aug
                     action_loss_sum = action_loss + action_loss_aug_weighted
                 else:
