@@ -117,11 +117,11 @@ class PPO():
                 if self.augmenter is not None:
                     action_loss.retain_grad()  # retain grad for norm calculation
                     action_loss_aug.retain_grad()
-                    action_loss_aug_weighted = self.weight_augmentation_loss(step=self.current_num_steps,
-                                                                             action_loss=action_loss,
-                                                                             action_loss_aug=action_loss_aug)
+                    action_loss_aug_weight = self.augmentation_loss_weight_function(self.current_num_steps, action_loss)
+                    action_loss_aug_weighted = action_loss_aug_weight * action_loss_aug
                     action_loss_sum = action_loss + action_loss_aug_weighted
                 else:
+                    action_loss_aug_weight = 0
                     action_loss_aug_weighted = 0
                     action_loss_sum = action_loss
                 action_loss_sum.retain_grad()  # retain grad for norm calculation
@@ -152,6 +152,7 @@ class PPO():
 
                 if self.augmenter is not None:
                     update_log['action_loss_aug'] += action_loss_aug.item()
+                    update_log['action_loss_aug_weight'] += action_loss_aug_weight
                     update_log['action_loss_aug_weighted'] += action_loss_aug_weighted
                     # In order to analyse the action space we report the max action performed in the augmentation step
                     if augmenter_loss_data["action_aug_max_value"] >= update_log['action_aug_max_value']:
@@ -172,13 +173,11 @@ class PPO():
         update_log['total_norm'] /= num_updates
         if self.augmenter is not None:
             update_log['action_loss_aug'] /= num_updates
+            update_log['action_loss_aug_weight'] /= num_updates
             update_log['action_loss_aug_weighted'] /= num_updates
             update_log['action_loss_ratio'] /= num_updates
 
         return update_log['value_loss'], update_log['action_loss'], update_log['dist_entropy'], update_log
-
-    def weight_augmentation_loss(self, step, action_loss, action_loss_aug, use_absolute_value=True):
-        return self.augmentation_loss_weight_function(step, action_loss) * action_loss_aug
 
     def init_update_logging(self, with_augmentation=False):
         update_log = {
@@ -190,6 +189,7 @@ class PPO():
             'total_norm': 0,
             'grad_norm': 0,
             'action_loss_ratio': 0,
+            'action_loss_aug_weight': 0,
             'images': {"obs": []}
         }
 
