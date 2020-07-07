@@ -221,7 +221,7 @@ def setup_consistency_loss(cfg):
         weight_function = None
 
     if cfg.learning.consistency_loss.use_action_loss_as_weight:
-        weighter = MovingAverageFromLossWeight(with_fixed_weight=consistency_loss_weight,
+        weighter = MovingAverageFromLossWeight(num_values=100, with_fixed_weight=consistency_loss_weight,
                                                with_loss_weight_function=weight_function)
     elif cfg.learning.consistency_loss.loss_weight_function_params:
         weighter = FunctionWeight(function=weight_function,
