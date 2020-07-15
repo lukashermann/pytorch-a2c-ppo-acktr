@@ -1,5 +1,6 @@
 from abc import ABC
 
+import numpy as np
 
 class Weighter(ABC):
     """
@@ -104,6 +105,10 @@ class MovingAverageFromLossWeight(FunctionWeight):
         self.avg = None
         self._num_values = num_values
 
+        self.last_step_value = 0
+        self.avg_cache = []
+
+
     def __call__(self, step, loss, **kwargs):
         """
         Calculates the moving average of the loss argument.
@@ -120,49 +125,67 @@ class MovingAverageFromLossWeight(FunctionWeight):
         Returns:
             weight for loss
 
-        # >>> avg_weight = MovingAverageFromLossWeight(num_values=3)
-        # >>> avg_weight(step=1000, loss=10)
+        # >>> avg_weight = MovingAverageFromLossWeight(num_values=2)
+        # >>> avg_weight(step=0, loss=10.0)
         # 10.0
-        # >>> avg_weight(step=1000, loss=10)
+        # >>> avg_weight(step=0, loss=5.)
         # 10.0
-        # >>> avg_weight(step=1000, loss=5)
-        # 8.333333333333332
-        # >>> avg_weight(step=1000, loss=10)
-        # 8.88888888888889
-        # >>> avg_weight(step=1000, loss=10)
-        # 9.25925925925926
-        # >>> avg_weight = MovingAverageFromLossWeight(num_values=3, with_fixed_weight=0.1)
-        # >>> avg_weight(step=1000, loss=10)
+        # >>> avg_weight(step=1, loss=20.)
+        # 8.75
+        # >>> avg_weight(step=1, loss=30.)
+        # 8.75
+        # >>> avg_weight(step=1, loss=40.)
+        # 8.75
+        # >>> avg_weight(step=2, loss=10.)
+        # 19.375
+        # >>> avg_weight = MovingAverageFromLossWeight(num_values=2, with_fixed_weight=0.1)
+        # >>> avg_weight(step=1, loss=10.)
         # 1.0
-        # >>> avg_weight(step=1000, loss=5)
-        # 0.8333333333333333
-        >>> import numpy as np
+        # >>> avg_weight(step=1, loss=5.)
+        # 1.0
+        # >>> avg_weight(step=2, loss=20.)
+        # 0.875
         >>> function = np.poly1d([2])  # f(x) = 2x + 0
         >>> avg_weight = MovingAverageFromLossWeight(num_values=3, with_loss_weight_function=function)
-        >>> avg_weight(step=1000, loss=10)
+        >>> avg_weight(step=1000, loss=10.)
         20.0
-        >>> avg_weight(step=1000, loss=5)
+        >>> avg_weight(step=1000, loss=5.)
+        20.0
+        >>> avg_weight(step=1001, loss=10.)
         16.666666666666664
-        >>> avg_weight(step=1000, loss=10)
-        17.77777777777778
         >>> avg_weight = MovingAverageFromLossWeight(num_values=3, with_fixed_weight=0.1, with_loss_weight_function=function)
-        >>> avg_weight(step=1000, loss=10)
+        >>> avg_weight(step=1000, loss=10.)
         2.0
-        >>> avg_weight(step=1000, loss=5)
+        >>> avg_weight(step=1000, loss=5.)
+        2.0
+        >>> avg_weight(step=1001, loss=10.)
         1.6666666666666665
-        >>> avg_weight(step=1000, loss=10)
-        1.777777777777778
         """
         # For numerical stability: initialize with first loss value instead of 0
         if self.avg is None:
             self.avg = loss
+        if self.last_step_value is None:
+            self.last_step_value = step
 
-        self.avg -= self.avg / self._num_values
-        self.avg += loss / self._num_values
+        # If we are still in the same step, use previous loss value
+        if step != self.last_step_value:
+            self.update_avg(step)
+
+        self.avg_cache.append(loss)
 
         if self._weighting_function is not None:
             return self.avg * super().__call__(step, loss)
         if self._fixed_weight is not None:
             return self.avg * self._fixed_weight
 
-        return self.avg
+    def update_avg(self, step):
+        if len(self.avg_cache) == 0:
+            return self.avg
+        new_loss = np.mean(self.avg_cache)
+
+        self.avg -= self.avg / self._num_values
+        self.avg += new_loss / self._num_values
+
+        # Reset cache
+        self.last_step_value = step
+        self.avg_cache = []
