@@ -347,7 +347,6 @@ class RandAugment:
         self.__magnitude = normalized_magnitude
 
     def __call__(self, img: PIL.Image) -> PIL.Image:
-        # TODO: Implement weighted random choice
         # https://stackoverflow.com/questions/3679694/a-weighted-version-of-random-choice
         augs = self.choose_augs_by_magnitude()
         for augmentation in augs:
@@ -380,14 +379,14 @@ class RandAugment:
 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142]
         >>> randaugment = RandAugment(1, magnitude=0.5)
         >>> randaugment.get_augmentation_weights_for_magnitude()
-        [0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
-0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
-0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142]
+        [0.03571428571428571, 0.03571428571428571, 0.03571428571428571, 0.08116883116883117, 0.08116883116883117, \
+0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, \
+0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117]
         >>> randaugment = RandAugment(1, magnitude=0.2)
         >>> randaugment.get_augmentation_weights_for_magnitude()
-        [0.02857142857142857, 0.02857142857142857, 0.02857142857142857, 0.08311688311688312, \
-0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312, \
-0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312, 0.08311688311688312]
+        [0.014285714285714285, 0.014285714285714285, 0.014285714285714285, 0.08701298701298701, 0.08701298701298701, \
+0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, \
+0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701]
         """
         # Extract all static / non-static augmentations
         static_augs = np.array([aug for aug in self.augment_list if isinstance(aug, StaticAugmentation)])
@@ -396,12 +395,9 @@ class RandAugment:
         # Define maximum weight each augmentation can get
         max_weight = 1.0 / len(self.augment_list)
 
-        # For magnitude < 0.5, use linear function to derive static weight
-        if self.magnitude() <= 0.5:
-            # f(x) = x * max_weight / 0.5 for x <= 0.5
-            static_weight = self.magnitude() * max_weight / 0.5
-            # Calculate other weights depending on static weight (makes sure result is a prob. distribution)
-            other_weight = (1 - (static_weight * len(static_augs))) / len(non_static_augs)
-            return [static_weight if isinstance(aug, StaticAugmentation) else other_weight for aug in self.augment_list]
-        else:
-            return np.full(len(self.augment_list), 1.0 / len(self.augment_list)).tolist()
+        # Use linear function to derive static weight
+        # f(x) = x * max_weight for x <= 1.0
+        static_weight = self.magnitude() * max_weight
+        # Calculate other weights depending on static weight (makes sure result is a prob. distribution)
+        other_weight = (1 - (static_weight * len(static_augs))) / len(non_static_augs)
+        return [static_weight if isinstance(aug, StaticAugmentation) else other_weight for aug in self.augment_list]
