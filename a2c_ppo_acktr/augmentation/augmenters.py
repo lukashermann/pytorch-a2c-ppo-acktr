@@ -127,7 +127,7 @@ class TransformsAugmenter(Augmenter):
 
         # Detach action_unlab to prevent the gradient flow through the network
         if self.use_cnn_loss:
-            aug_loss = torch.nn.functional.cross_entropy(cnn_output_unlab.detach(),
+            aug_loss = torch.nn.functional.cosine_similarity(cnn_output_unlab.detach(),
                                               cnn_output_unlab_aug)
         else:
             aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(),
