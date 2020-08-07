@@ -149,6 +149,8 @@ def get_args(sysargs):
     parser.add_argument('--learning.consistency_loss.use-action-loss-as-weight', default=False, action="store_true",
                         help="If set, the consistency loss weight will be derived from the action loss "
                              "by a moving average. Can be combined with loss_weight and /or loss_weight_function_params.")
+    parser.add_argument('--learning.consistency_loss.eval_target_env', default=None,
+                        help="If set, an additional evaluation will be performed on the given environment with the set eval_interval")
 
     # experiment
     parser.add_argument('--experiment.num-bc-epochs', type=int, default=1000,

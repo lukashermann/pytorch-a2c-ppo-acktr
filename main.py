@@ -386,28 +386,29 @@ def save_image(cfg, agent_train_images, tb_writer_img, current_update_step):
                                          image / 255.0, image_idx)
 
 
-def eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir, tb_writer_img, tb_writer, log_file,
-                 total_num_steps):
-    eval_steps = 32 if j < num_updates - 1 else 100
+def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, eval_log_dir, tb_writer_img,
+                 eval_name="eval"):
+    eval_steps = 32 if update_step < num_updates - 1 else 100
 
     env_args = {"env_params_sampler_dict": cfg.env.params_file,
                 "data_folder_path": cfg.env.data_folder_path}
     eval_envs = make_vec_envs(
-        cfg.env.name, cfg.globals.seed + cfg.globals.num_processes * j, cfg.globals.num_processes,
+        env_name, cfg.globals.seed + cfg.globals.num_processes * update_step, cfg.globals.num_processes,
         cfg.learning.rl.gamma, eval_log_dir, cfg.env.add_timestep, device, True,
         num_frame_stack=cfg.env.num_framestack,
         normalize_obs=cfg.env.normalize_obs,
         env_args=env_args
     )
 
-    vec_norm = get_vec_normalize(eval_envs)
-    if vec_norm is not None:
-        vec_norm.eval()
-        if cfg.learning.rl.actor_critic.combi_policy:
-            vec_norm.ob_robot_rms = get_vec_normalize(envs).ob_robot_rms
-            vec_norm.ob_task_rms = get_vec_normalize(envs).ob_task_rms
-        else:
-            vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
+    # TODO: Dead code?
+    # vec_norm = get_vec_normalize(eval_envs)
+    # if vec_norm is not None:
+    #     vec_norm.eval()
+    #     if cfg.learning.rl.actor_critic.combi_policy:
+    #         vec_norm.ob_robot_rms = get_vec_normalize(envs).ob_robot_rms
+    #         vec_norm.ob_task_rms = get_vec_normalize(envs).ob_task_rms
+    #     else:
+    #         vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
 
     eval_episode_rewards = []
 
@@ -418,8 +419,9 @@ def eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir, 
     eval_masks = torch.zeros(cfg.globals.num_processes, 1, device=device)
 
     save_cnt = 0
-    if cfg.experiment.save_eval_images and j % 300 == 0:
-        os.mkdir(os.path.join(eval_log_dir, "iter_{}".format(j)))
+    if cfg.experiment.save_eval_images and update_step % 300 == 0:
+        os.mkdir(os.path.join(eval_log_dir, "iter_{}_{}".format(update_step, eval_name)))
+
     while len(eval_episode_rewards) <= eval_steps:
         with torch.no_grad():
             if cfg.learning.consistency_loss.use_cnn_loss:
@@ -431,15 +433,15 @@ def eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir, 
 
         # Obser reward and next obs
         obs, reward, done, infos = eval_envs.step(action)
-        if cfg.experiment.save_eval_images and j % 300 == 0 and save_cnt < 150:
+        if cfg.experiment.save_eval_images and update_step % 300 == 0 and save_cnt < 150:
             img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(
                 np.uint8)
             cv2.imwrite(
-                os.path.join(eval_log_dir, "iter_{}/img_{}.png".format(j, save_cnt)), img)
+                os.path.join(eval_log_dir, "iter_{}_{}/img_{}.png".format(update_step, save_cnt, eval_name)), img)
 
             # Tensorboard expects images to be in range [0, 1] for FloatTensor
             # TODO: Change obs range to [0, 1]
-            tb_writer_img.add_images("eval_" + str(j), obs['img'].cpu() / 255.0, save_cnt,
+            tb_writer_img.add_images(eval_name + "_" + str(update_step), obs['img'].cpu() / 255.0, save_cnt,
                                      dataformats='NCHW')
             save_cnt += 1
 
@@ -448,25 +450,9 @@ def eval_episode(cfg, j, num_updates, actor_critic, device, envs, eval_log_dir, 
         for info in infos:
             if 'episode' in info.keys():
                 eval_episode_rewards.append(info['episode']['r'])
-                # eval_reg_episode_rewards.append(info['episode']['r'])
 
     eval_envs.close()
-    if cfg.tensorboard:
-        tb_writer.add_scalar("eval_eprewmean_updates", np.mean(eval_episode_rewards), j)
-        tb_writer.add_scalar("eval_eprewmean_steps", np.mean(eval_episode_rewards),
-                             total_num_steps)
-        tb_writer.add_scalar("eval_success_rate",
-                             np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
-                             total_num_steps)
-        tb_writer.flush()
-
-    eval_log_output = "\nEvaluation using {} episodes: mean reward {:.5f}\n\n".format(
-        len(eval_episode_rewards), np.mean(eval_episode_rewards))
-    print()
-    print(eval_log_output)
-    print()
-    log_file.write(eval_log_output)
-    log_file.flush()
+    return eval_episode_rewards
 
 
 def setup_agent(cfg, actor_critic):
@@ -477,6 +463,25 @@ def setup_agent(cfg, actor_critic):
     elif cfg.learning.rl.algo == 'acktr':
         return algo.A2C_ACKTR(actor_critic, cfg.learning.rl.value_loss_coef,
                               cfg.learning.rl.entropy_coef, acktr=True)
+
+
+def save_eval_episode_rewards(cfg, eval_episode_rewards, step, total_num_steps, tb_writer, log_file, eval_name="_"):
+    if cfg.tensorboard:
+        tb_writer.add_scalar("eval{}eprewmean_updates".format(eval_name), np.mean(eval_episode_rewards), step)
+        tb_writer.add_scalar("eval{}eprewmean_steps".format(eval_name), np.mean(eval_episode_rewards),
+                             total_num_steps)
+        tb_writer.add_scalar("eval{}success_rate".format(eval_name),
+                             np.mean(np.array(eval_episode_rewards) > 0).astype(np.float),
+                             total_num_steps)
+        tb_writer.flush()
+
+    eval_log_output = "\nEvaluation using {} episodes on env {} (name {}): mean reward {:.5f}\n\n".format(
+        len(eval_episode_rewards), cfg.env.name, eval_name, np.mean(eval_episode_rewards))
+    print()
+    print(eval_log_output)
+    print()
+    log_file.write(eval_log_output)
+    log_file.flush()
 
 
 def train(sysargs):
@@ -515,9 +520,9 @@ def train(sysargs):
 
     # ======== Training loop
     start = time.time()
-    for j in tqdm(range(num_updates), desc="Updates"):
+    for update_step in tqdm(range(num_updates), desc="Updates"):
         # === Update LR
-        update_learning_rate(cfg, agent, j, num_updates, eval_episode_rewards)
+        update_learning_rate(cfg, agent, update_step, num_updates, eval_episode_rewards)
 
         # === Rollout collection
         for step in tqdm(range(cfg.globals.num_steps), desc="Env steps"):
@@ -565,7 +570,7 @@ def train(sysargs):
                                                     rollouts.recurrent_hidden_states[-1],
                                                     rollouts.masks[-1]).detach()
 
-        total_num_steps = (j + 1) * cfg.globals.num_processes * cfg.globals.num_steps
+        total_num_steps = (update_step + 1) * cfg.globals.num_processes * cfg.globals.num_steps
 
         # Add current step information to agent as some agent need this info for calculation of losses
         if hasattr(agent, 'set_current_num_steps'):
@@ -577,14 +582,14 @@ def train(sysargs):
         rollouts.after_update()
 
         # save for every interval-th episode or for the last epoch
-        if (j % cfg.experiment.save_interval == 0 or j == num_updates - 1) and cfg.save_dir != "":
-            save_model(cfg, envs, actor_critic, j)
-            save_image(cfg, update_log['images'], tb_writer_img, j)
+        if (update_step % cfg.experiment.save_interval == 0 or update_step == num_updates - 1) and cfg.save_dir != "":
+            save_model(cfg, envs, actor_critic, update_step)
+            save_image(cfg, update_log['images'], tb_writer_img, update_step)
 
-        if j % cfg.experiment.log_interval == 0 and len(episode_rewards) > 1:
+        if update_step % cfg.experiment.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
             log_output = "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward " \
-                         "{:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(j,
+                         "{:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(update_step,
                                                                                 total_num_steps,
                                                                                 int(total_num_steps / (end - start)),
                                                                                 len(episode_rewards),
@@ -600,11 +605,23 @@ def train(sysargs):
             log_file.flush()
 
         if (cfg.experiment.eval_interval is not None and len(
-                episode_rewards) > 1 and j % cfg.experiment.eval_interval == 0):
-            eval_episode(cfg, j, num_updates, actor_critic, device, envs, cfg.eval_log_dir, tb_writer_img, tb_writer,
-                         log_file, total_num_steps)
+                episode_rewards) > 1 and update_step % cfg.experiment.eval_interval == 0):
+            # Evaluation on training domain
+            eval_episode_rewards = eval_episode(cfg, cfg.env.name, update_step, num_updates, actor_critic, device,
+                                                cfg.eval_log_dir, tb_writer_img, "eval")
+            save_eval_episode_rewards(cfg, eval_episode_rewards, update_step, total_num_steps, tb_writer, log_file)
 
-        if cfg.experiment.vis and j % cfg.experiment.vis_interval == 0:
+            if cfg.learning.consistency_loss.eval_target_env is not None:
+                # Evaluation on target domain (if set, only simulated envs supported)
+                eval_target_domain_env = cfg.learning.consistency_loss.eval_target_env
+                eval_episode_rewards_target_domain = eval_episode(cfg, eval_target_domain_env, update_step, num_updates,
+                                                                  actor_critic, device, cfg.eval_log_dir,
+                                                                  tb_writer_img, "eval_target_domain")
+
+                save_eval_episode_rewards(cfg, eval_episode_rewards_target_domain, update_step, total_num_steps, tb_writer, log_file,
+                                          eval_name="_target_domain_")
+
+        if cfg.experiment.vis and update_step % cfg.experiment.vis_interval == 0:
             try:
                 # Sometimes monitor doesn't properly flush the outputs
                 window = visdom_plot(visdom, window, cfg.log_dir, cfg.training_name,
@@ -613,7 +630,7 @@ def train(sysargs):
                 pass
 
         if cfg.tensorboard and len(episode_rewards) > 1:
-            tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), j)
+            tb_writer.add_scalar("eprewmean_updates", np.mean(episode_rewards), update_step)
             tb_writer.add_scalar("eprewmean_steps", np.mean(episode_rewards), total_num_steps)
             tb_writer.add_scalar("training_success_rate", np.mean(train_success), total_num_steps)
             tb_writer.add_scalar("eprewmedian_steps", np.median(episode_rewards), total_num_steps)
