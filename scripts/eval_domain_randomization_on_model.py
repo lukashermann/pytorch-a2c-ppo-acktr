@@ -44,6 +44,8 @@ if __name__ == '__main__':
                              'to prevent wrong results')
     parser.add_argument('--use-randaugment', action="store_true",
                         help='If set, randaugment is used to augment images in evaluation')
+    parser.add_argument('--table-surface', type=str, help="Defines the table surface of the eval environment",
+                        default='white')
 
     args = parser.parse_args(sys.argv[1:])
     use_tensorboard = args.use_tensorboard
@@ -59,6 +61,7 @@ if __name__ == '__main__':
     num_runs_per_experiment = args.num_runs_per_augmentation
     num_episodes_per_run = args.num_episodes_per_run
     use_randaugment = args.use_randaugment
+    table_surface = args.table_surface
 
     fixed_difficulty = args.fixed_difficulty
 
@@ -87,7 +90,7 @@ if __name__ == '__main__':
                                obs_type='img_state_reduced', use_dr=False,
                                max_steps=150,
                                restitution=0.5, gripper_delay=12, img_type='rgb',
-                               adaptive_task_difficulty=True, table_surface='white',
+                               adaptive_task_difficulty=True, table_surface=table_surface,
                                position_error_obs=False, block_type='primitive',
                                img_size="rl",
                                movement_calib="new", env_params_sampler_dict=env_params_sampler_dict)
@@ -128,6 +131,9 @@ if __name__ == '__main__':
             warmup_done = warmup_done.any() if isinstance(warmup_done,
                                                           np.ndarray) else warmup_done
             warmup_env_step += 1
+
+    if fixed_difficulty is not None:
+        num_augmentation_steps = 1
 
     for experiment_count in tqdm(range(num_augmentation_steps), desc="Experiment"):
         domain_rand_amount = domain_randomization_rates[experiment_count]
