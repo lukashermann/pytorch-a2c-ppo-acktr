@@ -183,10 +183,8 @@ def load_actor_critic_from_snapshot(snapshot_path):
     return actor_critic
 
 
-def setup_actor_critic(cfg, envs):
-    if cfg.learning.rl.actor_critic.snapshot is not None:
-        return load_actor_critic_from_snapshot(cfg.learning.rl.actor_critic.snapshot)
 
+def setup_actor_critic(cfg, envs):
     if cfg.learning.rl.actor_critic.combi_policy:
         base_kwargs = {'recurrent': cfg.learning.rl.actor_critic.recurrent_policy,
                        'cnn_architecture': cfg.learning.rl.actor_critic.cnn_architecture}
@@ -201,6 +199,9 @@ def setup_actor_critic(cfg, envs):
         actor_critic = Policy(envs.observation_space.shape, envs.action_space,
                               base_kwargs={'recurrent': cfg.learning.rl.actor_critic.recurrent_policy})
 
+    if cfg.learning.rl.actor_critic.snapshot is not None:
+        checkpoint = load_actor_critic_from_snapshot(cfg.learning.rl.actor_critic.snapshot)
+        actor_critic.load_state_dict(checkpoint.state_dict())
     return actor_critic
 
 
