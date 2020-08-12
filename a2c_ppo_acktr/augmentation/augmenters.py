@@ -128,11 +128,9 @@ class TransformsAugmenter(Augmenter):
         # Detach action_unlab to prevent the gradient flow through the network
         if self.use_cnn_loss:
             # Cosine similarity is defined between -1 to 1, where 1 is most similar -> Flip via 1 - loss
-            aug_loss = 1 - torch.nn.functional.cosine_similarity(cnn_output_unlab.detach(),
-                                              cnn_output_unlab_aug).mean()
+            aug_loss = 1 - torch.nn.functional.cosine_similarity(cnn_output_unlab, cnn_output_unlab_aug.detach()).mean()
         else:
-            aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(),
-                                                           action_unlab_aug)
+            aug_loss = torch.nn.functional.mse_loss(action_unlab, action_unlab_aug.detach())
 
         # Determine max action for tracing actions
         additional_data["action_aug_max_value"] = torch.max(torch.max(action_unlab), torch.max(action_unlab_aug))
