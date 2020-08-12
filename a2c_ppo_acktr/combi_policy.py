@@ -125,9 +125,7 @@ class CombiPolicy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         if self.return_cnn_output:
-            print("Returning with CNN output")
             return value, action, action_log_probs, rnn_hxs, cnn_output
-
         return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks):
