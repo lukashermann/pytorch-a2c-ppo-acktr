@@ -24,7 +24,8 @@ class PPO():
                  augmenter: Augmenter = None,
                  return_images: bool = False,
                  augmentation_data_loader=None,
-                 augmentation_loss_weight_function=None):
+                 augmentation_loss_weight_function=None,
+                 force_ignore_loss_aug=False):
 
         self.actor_critic = actor_critic
 
@@ -42,6 +43,9 @@ class PPO():
 
         self.augmenter = augmenter
         self.augmemtation_data_loader = augmentation_data_loader
+
+        # If this is set to true, the augmentation loss is calculated, but not added to the loss
+        self.force_ignore_loss_aug = force_ignore_loss_aug
 
         if self.augmenter is not None:
             assert augmentation_loss_weight_function is not None
@@ -119,7 +123,11 @@ class PPO():
                     action_loss_aug.retain_grad()
                     action_loss_aug_weight = self.augmentation_loss_weight_function(self.current_num_steps, action_loss.item())
                     action_loss_aug_weighted = action_loss_aug_weight * action_loss_aug
-                    action_loss_sum = action_loss + action_loss_aug_weighted
+
+                    if self.force_ignore_loss_aug:
+                        action_loss_sum = action_loss
+                    else:
+                        action_loss_sum = action_loss + action_loss_aug_weighted
                 else:
                     action_loss_aug_weight = 0
                     action_loss_aug_weighted = 0

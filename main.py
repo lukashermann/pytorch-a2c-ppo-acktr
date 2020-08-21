@@ -300,7 +300,8 @@ def setup_ppo_agent(cfg, actor_critic):
                      augmenter=augmenter,
                      return_images=cfg.experiment.save_train_images,
                      augmentation_data_loader=dataloader,
-                     augmentation_loss_weight_function=augmentation_loss_weight_function)
+                     augmentation_loss_weight_function=augmentation_loss_weight_function,
+                     force_ignore_loss_aug=cfg.learning.consistency_loss.force_disable_consistency)
     return agent
 
 
