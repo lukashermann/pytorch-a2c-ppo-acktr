@@ -130,7 +130,7 @@ class TransformsAugmenter(Augmenter):
             # Cosine similarity is defined between -1 to 1, where 1 is most similar -> Flip via 1 - loss
             aug_loss = 1 - torch.nn.functional.cosine_similarity(cnn_output_unlab.detach(), cnn_output_unlab_aug).mean()
         else:
-            aug_loss = torch.nn.functional.mse_loss(action_unlab, action_unlab_aug.detach())
+            aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(), action_unlab_aug)
 
         # Determine max action for tracing actions
         additional_data["action_aug_max_value"] = torch.max(torch.max(action_unlab), torch.max(action_unlab_aug))
