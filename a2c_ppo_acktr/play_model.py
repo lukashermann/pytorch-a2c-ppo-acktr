@@ -54,8 +54,14 @@ class Model:
     def step(self, obs, done):
         self.masks.fill_(0.0 if done else 1.0)
         with torch.no_grad():
-            value, action, _, self.recurrent_hidden_states = self.actor_critic.act(obs, self.recurrent_hidden_states,
+            act_result = self.actor_critic.act(obs, self.recurrent_hidden_states,
                                                                                    self.masks,
                                                                                    deterministic=self.deterministic)
+
+            if len(act_result) == 5:  # with CNN output
+                value, action, _, self.recurrent_hidden_states, cnn_output = act_result
+            else:
+                value, action, _, self.recurrent_hidden_states = act_result
+
         return action
 
