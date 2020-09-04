@@ -487,8 +487,9 @@ def save_eval_episode_rewards(cfg, eval_episode_rewards, step, total_num_steps, 
 
 def save_result_model_path(cfg, last_model_save_path):
     save_file = os.path.abspath(os.path.join(cfg.log_dir, "model_paths.json"))
+    tag = cfg.experiment.tag if cfg.experiment.tag else cfg.training_name
     data = {
-        "tag": cfg.experiment.tag,
+        "tag": tag,
         "model_path": os.path.normpath(os.path.join(os.getcwd(), last_model_save_path))
     }
     with open(save_file, "w") as out_file:
