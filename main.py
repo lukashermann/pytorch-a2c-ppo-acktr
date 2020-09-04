@@ -369,7 +369,9 @@ def save_model(cfg, envs, actor_critic, current_update_step):
         save_model = [save_model,
                       getattr(get_vec_normalize(envs), 'ob_rms', None)]
 
-    torch.save(save_model, os.path.join(save_path, cfg.env.name + "_" + str(current_update_step) + ".pt"))
+    model_path = os.path.join(save_path, cfg.env.name + "_" + str(current_update_step) + ".pt")
+    torch.save(save_model, model_path)
+    return model_path
 
 
 def save_image(cfg, agent_train_images, tb_writer_img, current_update_step):
@@ -486,6 +488,16 @@ def save_eval_episode_rewards(cfg, eval_episode_rewards, step, total_num_steps, 
     log_file.flush()
 
 
+def save_result_model_path(cfg, last_model_save_path):
+    save_file = os.path.abspath(os.path.join(cfg.log_dir, "model_paths.json"))
+    data = {
+        "tag": None,
+        "model_path": os.path.normpath(os.path.join(os.getcwd(), last_model_save_path))
+    }
+    with open(save_file, "w") as out_file:
+        json.dump(data, out_file)
+
+
 def train(sysargs):
     cfg = get_args(sysargs[1:])
 
@@ -495,6 +507,8 @@ def train(sysargs):
     visdom, window = setup_visualization(cfg)
 
     tb_writer, tb_writer_img, log_file = setup_dirs_and_logging(cfg)
+    last_model_save_path = ""  # Save path for model will be set by save-functionality for later use
+
     device = setup_cuda(cfg)
 
     num_updates = int(cfg.env.num_env_steps) // cfg.globals.num_steps // cfg.globals.num_processes
@@ -585,7 +599,7 @@ def train(sysargs):
 
         # save for every interval-th episode or for the last epoch
         if (update_step % cfg.experiment.save_interval == 0 or update_step == num_updates - 1) and cfg.save_dir != "":
-            save_model(cfg, envs, actor_critic, update_step)
+            last_model_save_path = save_model(cfg, envs, actor_critic, update_step)
             save_image(cfg, update_log['images'], tb_writer_img, update_step)
 
         if update_step % cfg.experiment.log_interval == 0 and len(episode_rewards) > 1:
@@ -649,6 +663,7 @@ def train(sysargs):
         if cfg.experiment.save_eval_images or cfg.experiment.save_train_images:
             tb_writer_img.close()
 
+    save_result_model_path(cfg, last_model_save_path)
 
 if __name__ == "__main__":
     train(sys.argv)
