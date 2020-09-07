@@ -93,7 +93,10 @@ def get_training_name(cfg: SimpleNamespace):
 
 
 def get_log_dir(cfg: SimpleNamespace):
-    return os.path.join(cfg.experiment.root_dir, cfg.training_name)
+    if cfg.experiment.tag is not None:
+        return os.path.join(cfg.experiment.root_dir, cfg.experiment.tag, cfg.training_name)
+    else:
+        return os.path.join(cfg.experiment.root_dir, cfg.training_name)
 
 
 def setup_dirs_and_logging(cfg: SimpleNamespace):
