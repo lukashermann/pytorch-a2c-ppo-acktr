@@ -22,7 +22,7 @@ from a2c_ppo_acktr.combi_policy import CombiPolicy
 from a2c_ppo_acktr.storage import RolloutStorage, CombiRolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, update_linear_schedule_half, update_linear_schedule_less, update_sr_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-from gym_grasping.envs.grasping_env import GraspingEnv
+from gym_grasping.envs.robot_sim_env import RobotSimEnv
 from tensorboardX import SummaryWriter
 
 
