@@ -10,16 +10,65 @@ import random
 import sys
 
 import numpy as np
-from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_SMALL_RANGE, RandAugment
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from torchvision import transforms
 
+
+import a2c_ppo_acktr.augmentation.augmenters as augmenters
+import a2c_ppo_acktr.augmentation.randaugment as randaugment
 from a2c_ppo_acktr.augmentation.wrappers import AugmentationObservationWrapper
 from a2c_ppo_acktr.play_model import Model, build_env, render_obs
+from gym_grasping.envs import CurriculumEnvLog
 from gym_grasping.envs.grasping_env import GraspingEnv
 from gym_grasping.envs.utils import import_env_params_from_file
 from gym_grasping.scripts.utils.args import get_and_create_output_dir, get_base_argument_parser
+
+
+def set_env_domain_randomization(grasping_env, domain_rand_amount):
+    # Visual Domain Randomization
+    grasping_env.env_params.set_variable_difficulty_r("vis/block_red", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/block_blue", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/table_green", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/brightness", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/contrast", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/color", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/shaprness", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/blur", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/hue", domain_rand_amount)
+    grasping_env.env_params.set_variable_difficulty_r("vis/light_direction", domain_rand_amount)
+
+    # Set task difficulty to maximum
+    grasping_env.env_params.set_variable_difficulty_mu("geom/object_to_gripper", 1)
+    grasping_env.env_params.set_variable_difficulty_r("geom/object_to_gripper", 1)
+
+
+RANDAUGMENT_MAP = {
+    "Identity": randaugment.Identity,
+    "AutoContrast": randaugment.AutoContrast,
+    "Equalize": randaugment.Equalize,
+    "Rotate": randaugment.Rotate,
+    "Solarize": randaugment.Solarize,
+    "Color": randaugment.Color,
+    "Posterize": randaugment.Posterize,
+    "Contrast": randaugment.Contrast,
+    "Brightness": randaugment.Brightness,
+    "Sharpness": randaugment.Sharpness,
+    "ShearX": randaugment.ShearX,
+    "ShearY": randaugment.ShearY,
+    "TranslateX": randaugment.TranslateX,
+    "TranslateY": randaugment.TranslateY
+}
+
+
+def setup_randaugment_augmentation_list(randaugment_augs):
+    if randaugment_augs is None:
+        return randaugment.AUGMENTATION_LIST_SMALL_RANGE
+    else:
+        augs = []
+        for rand_aug in randaugment_augs:
+            augs.append(RANDAUGMENT_MAP[rand_aug]())
+        return augs
 
 if __name__ == '__main__':
     parser = get_base_argument_parser()
@@ -40,11 +89,20 @@ if __name__ == '__main__':
                         help='Number of completed episodes each run should perform in the environment')
     parser.add_argument('--num-warmup-episodes', type=int, default=0,
                         help='Number of episodes which are performed before the actual evaluation in order '
-                             'to let the environment warm-up, in order'
+                             'to let the environment warm-up, in order' 
                              'to prevent wrong results')
     parser.add_argument('--use-randaugment', action="store_true",
                         help='If set, randaugment is used to augment images in evaluation')
-    parser.add_argument('--table-surface', type=str, help="Defines the table surface of the eval environment",
+    parser.add_argument('--randaugment-augmentations',
+                        choices=RANDAUGMENT_MAP.keys(), nargs='+', type=str,
+                        default=None,
+                        help='Pass a list of augmentations to be used during evaluation')
+    parser.add_argument('--randaugment-num-augmentations', type=int, default=3,
+                        help='Number of augmentations used in Randaugment')
+    parser.add_argument('--fixed-env-domain-randomization', type=float, default=None,
+                        help='If set, the environment domain randomization is fixed to the given value (randaugment is not affected)')
+    parser.add_argument('--table-surface', type=str,
+                        help="Defines the table surface of the eval environment",
                         default='white')
 
     args = parser.parse_args(sys.argv[1:])
@@ -55,13 +113,18 @@ if __name__ == '__main__':
     tag = "-" + args.tag if args.tag is not None else ""
     model_path = args.model_path
     seed = args.seed
-    env_params_sampler_dict = import_env_params_from_file(args.env_params_file) if args.env_params_file else None
+    env_params_sampler_dict = import_env_params_from_file(
+        args.env_params_file) if args.env_params_file else None
     num_warmup_episodes = args.num_warmup_episodes
     num_augmentation_steps = args.num_augmentation_steps
     num_runs_per_experiment = args.num_runs_per_augmentation
     num_episodes_per_run = args.num_episodes_per_run
-    use_randaugment = args.use_randaugment
     table_surface = args.table_surface
+
+    fixed_env_domain_rand_amount = args.fixed_env_domain_randomization
+    use_randaugment = args.use_randaugment
+    randaugment_augs = args.randaugment_augmentations
+    randaugment_num_augs = args.randaugment_num_augmentations
 
     fixed_difficulty = args.fixed_difficulty
 
@@ -84,28 +147,22 @@ if __name__ == '__main__':
             for arg in vars(args):
                 file.write(str(arg) + ' ' + str(getattr(args, arg)) + '\n')
 
-    # Environment setup
-    grasping_env = GraspingEnv(task='stackVel', curr='no_dr', initial_pose='close',
-                               act_type='continuous', renderer='egl',
-                               obs_type='img_state_reduced', use_dr=False,
-                               max_steps=150,
-                               restitution=0.5, gripper_delay=12, img_type='rgb',
-                               adaptive_task_difficulty=True, table_surface=table_surface,
-                               position_error_obs=False, block_type='primitive',
-                               img_size="rl",
-                               movement_calib="new", env_params_sampler_dict=env_params_sampler_dict)
 
+    # Environment setup
+    grasping_env = CurriculumEnvLog(task='stackVel', curr='no_dr', initial_pose='close',
+                            act_type='continuous', renderer='egl',
+                            obs_type='img_state_reduced', use_dr=False, max_steps=150,
+                            restitution=0.5, gripper_delay=12, img_type='rgb',
+                            adaptive_task_difficulty=True, table_surface='brown_v4',
+                            position_error_obs=False, block_type='primitive', img_size="rl",
+                            movement_calib="old")
     experiment_env = build_env(grasping_env, normalize_obs=False)
 
     if use_randaugment:
-        rand_aug = RandAugment(num_augmentations=3, magnitude=0.0, augmentation_list=AUGMENTATION_LIST_SMALL_RANGE)
-        transforms = transforms.Compose([
-            transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
-            transforms.ToPILImage(),
-            rand_aug,
-            transforms.ToTensor(),
-            transforms.Lambda(lambda img: img * 255.0),  # TODO: Change obs range to [0, 1]
-        ])
+        augmentation_list = setup_randaugment_augmentation_list(randaugment_augs)
+        rand_aug = randaugment.RandAugment(num_augmentations=randaugment_num_augs, magnitude=0.0,
+                               augmentation_list=augmentation_list)
+        transforms = augmenters.transforms_from_randaugment(rand_aug)
         experiment_env = AugmentationObservationWrapper(experiment_env, transforms=transforms)
 
     model_path = os.path.join(os.getcwd(), model_path)
@@ -123,6 +180,7 @@ if __name__ == '__main__':
         # create variable / constant, this number is chosen empirically, as it took arround 5
         # 5 episodes to get stable results.
         grasping_env.seed(seed)
+
         warmup_obs, warmup_done = experiment_env.reset(), False
         warmup_env_step = 0
         while not warmup_done:
@@ -156,22 +214,9 @@ if __name__ == '__main__':
 
         obs_cache[experiment_count] = []
 
-        # Visual Domain Randomization
-        grasping_env.env_params.set_variable_difficulty_r("vis/block_red", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/block_blue", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/table_green", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/brightness", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/contrast", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/color", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/shaprness", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/blur", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/hue", domain_rand_amount)
-        grasping_env.env_params.set_variable_difficulty_r("vis/light_direction", domain_rand_amount)
-
-        # Set task difficulty to maximum
-        grasping_env.env_params.set_variable_difficulty_mu("geom/object_to_gripper", 1)
-        grasping_env.env_params.set_variable_difficulty_r("geom/object_to_gripper", 1)
-
+        # Set domain_rand_amount
+        env_domain_randomization = fixed_env_domain_rand_amount if fixed_env_domain_rand_amount else domain_rand_amount
+        set_env_domain_randomization(grasping_env, env_domain_randomization)
         if use_randaugment:
             rand_aug.set_magnitude(domain_rand_amount)
 
@@ -232,10 +277,10 @@ if __name__ == '__main__':
 
             experiment_stat[experiment_count]["runs"].append(run_stats)
 
-            print("Run {}/{} of experiment {} - Run Success Rate: {} - Avg Reward: {}".format(
+            print("Run {}/{} of experiment {} - Run Success Rate: {} - Avg Reward: {} - Seed: {}".format(
                 run_count + 1, num_runs_per_experiment,
                 experiment_count, run_stats["run_success_rate"], run_stats["run_avg_reward"],
-                run_stats["run_avg_steps"]))
+                run_stats["run_avg_steps"]), seeds[run_count])
 
         # Calculate experiment statistics
         experiment_successes_per_run = [run["run_success_rate"] for run in
