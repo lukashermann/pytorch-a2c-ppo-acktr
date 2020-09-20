@@ -93,11 +93,15 @@ class PPO():
                     else:
                         aug_obs_batch_orig = obs_batch
 
+                    # Not used in our actor critic as we don't train a recurent policy
+                    recurrent_hidden_states = torch.zeros(1, self.actor_critic.recurrent_hidden_state_size)
+                    masks = torch.zeros(1, 1)
+
                     action_loss_aug, aug_obs_batch_augmented, augmenter_loss_data = self.augmenter.calculate_loss(
                         actor_critic=self.actor_critic,
                         obs_batch=aug_obs_batch_orig,
-                        recurrent_hidden_states_batch=recurrent_hidden_states_batch,
-                        masks_batch=masks_batch,
+                        recurrent_hidden_states_batch=recurrent_hidden_states,
+                        masks_batch=masks,
                         return_images=self.return_images)
 
                     if self.return_images:
