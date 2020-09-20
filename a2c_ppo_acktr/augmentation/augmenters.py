@@ -25,15 +25,18 @@ def get_transformer_by_name(name, **kwargs):
 
 
 def create_randaugment_transformer(num_augmentations=3, magnitude=0.3, augmentation_list=AUGMENTATION_LIST_SMALL_RANGE):
-    rand_aug = RandAugment(num_augmentations=num_augmentations, magnitude=magnitude, augmentation_list=augmentation_list)
-    return transforms.Compose([
-        transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
-        transforms.ToPILImage(),
-        rand_aug,
-        transforms.ToTensor(),
-        transforms.Lambda(lambda img: img * 255.0),  # TODO: Change obs range to [0, 1]
-    ])
+    randaugment = RandAugment(num_augmentations=num_augmentations, magnitude=magnitude, augmentation_list=augmentation_list)
+    return transforms_from_randaugment(randaugment)
 
+
+def transforms_from_randaugment(randaugment):
+    return transforms.Compose([
+            transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
+            transforms.ToPILImage(),
+            randaugment,
+            transforms.ToTensor(),
+            transforms.Lambda(lambda img: img * 255.0),  # TODO: Change obs range to [0, 1]
+        ])
 
 def create_color_transformer(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5):
     """
