@@ -57,7 +57,7 @@ def validate_inputs(cfg: SimpleNamespace):
     Validates the input configuration
     :param cfg: configuration to be validated
     """
-    assert cfg.learning.rl.algo in ['a2c', 'ppo', 'acktr']
+    assert cfg.learning.rl.algo in ['a2c', 'ppo', 'acktr', 'consistency']
     if cfg.learning.rl.actor_critic.recurrent_policy:
         assert cfg.learning.rl.algo in ['a2c', 'ppo'], \
             'Recurrent policy is not implemented for ACKTR'
@@ -183,7 +183,6 @@ def load_actor_critic_from_snapshot(snapshot_path):
     return actor_critic
 
 
-
 def setup_actor_critic(cfg, envs):
     if cfg.learning.rl.actor_critic.combi_policy:
         base_kwargs = {'recurrent': cfg.learning.rl.actor_critic.recurrent_policy,
@@ -205,7 +204,7 @@ def setup_actor_critic(cfg, envs):
     return actor_critic
 
 
-def setup_consistency_loss(cfg):
+def setup_consistency_loss_weight_fct(cfg):
     """
     Configures consistency loss parameters
 
@@ -268,16 +267,13 @@ def setup_augmenter(cfg):
     return augmenter
 
 
-def setup_ppo_agent(cfg, actor_critic):
-    dataloader = None
-    augmenter = None
-    augmentation_loss_weight = 0.0
-    augmentation_loss_weight_function = None
+def setup_consistency_loss(cfg):
+    augmenter, augmentation_loss_weight_function, dataloader = None, None, None
     if cfg.learning.consistency_loss.enable:
         assert cfg.learning.consistency_loss.augmenter is not None
 
         augmenter = setup_augmenter(cfg)
-        augmentation_loss_weight_function = setup_consistency_loss(cfg)
+        augmentation_loss_weight_function = setup_consistency_loss_weight_fct(cfg)
 
         if cfg.learning.consistency_loss.dataset_folder is not None:
             dataset = ObsDataset(root_folder=cfg.learning.consistency_loss.dataset_folder,
@@ -292,6 +288,12 @@ def setup_ppo_agent(cfg, actor_critic):
             dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, shuffle=True,
                                     num_workers=0, drop_last=True)
 
+    return augmenter, augmentation_loss_weight_function, dataloader
+
+
+def setup_ppo_agent(cfg, actor_critic):
+    augmenter, augmentation_loss_weight_function, dataloader = setup_consistency_loss(cfg)
+
     agent = algo.PPO(actor_critic, cfg.learning.rl.ppo.clip_param, cfg.learning.rl.ppo.epoch,
                      cfg.globals.num_mini_batch,
                      cfg.learning.rl.value_loss_coef, cfg.learning.rl.entropy_coef, lr=cfg.learning.optimizer.lr,
@@ -302,6 +304,25 @@ def setup_ppo_agent(cfg, actor_critic):
                      augmentation_data_loader=dataloader,
                      augmentation_loss_weight_function=augmentation_loss_weight_function,
                      force_ignore_loss_aug=cfg.learning.consistency_loss.force_disable_consistency)
+    return agent
+
+
+def setup_consistency_agent(cfg, actor_critic):
+    augmenter, augmentation_loss_weight_function, dataloader = setup_consistency_loss(cfg)
+
+    agent = algo.Consistency(actor_critic,
+                             cfg.globals.num_mini_batch,
+                             # cfg.learning.rl.value_loss_coef, cfg.learning.rl.entropy_coef,
+                             max_grad_norm=cfg.learning.rl.max_grad_norm,
+                             lr=cfg.learning.optimizer.lr,
+                             eps=cfg.learning.optimizer.eps,
+                             num_epochs=4,
+                             # max_grad_norm=cfg.learning.rl.max_grad_norm,
+                             augmenter=augmenter,
+                             return_images=cfg.experiment.save_train_images,
+                             augmentation_data_loader=dataloader,
+                             augmentation_loss_weight_function=augmentation_loss_weight_function,
+                             force_ignore_loss_aug=cfg.learning.consistency_loss.force_disable_consistency)
     return agent
 
 
@@ -467,6 +488,8 @@ def setup_agent(cfg, actor_critic):
     elif cfg.learning.rl.algo == 'acktr':
         return algo.A2C_ACKTR(actor_critic, cfg.learning.rl.value_loss_coef,
                               cfg.learning.rl.entropy_coef, acktr=True)
+    elif cfg.learning.rl.algo == 'consistency':
+        return setup_consistency_agent(cfg, actor_critic)
 
 
 def save_eval_episode_rewards(cfg, eval_episode_rewards, step, total_num_steps, tb_writer, log_file, eval_name="_"):
@@ -635,7 +658,8 @@ def train(sysargs):
                                                                   actor_critic, device, cfg.eval_log_dir,
                                                                   tb_writer_img, "eval_target_domain")
 
-                save_eval_episode_rewards(cfg, eval_episode_rewards_target_domain, update_step, total_num_steps, tb_writer, log_file,
+                save_eval_episode_rewards(cfg, eval_episode_rewards_target_domain, update_step, total_num_steps,
+                                          tb_writer, log_file,
                                           eval_name="_target_domain_")
 
         if cfg.experiment.vis and update_step % cfg.experiment.vis_interval == 0:
@@ -665,6 +689,7 @@ def train(sysargs):
             tb_writer_img.close()
 
     save_result_model_path(cfg, last_model_save_path)
+
 
 if __name__ == "__main__":
     train(sys.argv)
