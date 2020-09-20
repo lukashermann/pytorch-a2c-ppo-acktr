@@ -367,26 +367,43 @@ class RandAugment:
             The weight depends on the magnitude of randaugment. For magnitude -> 0.0 this method will return 0.0 weight
             for augmentation which have no range. This will make sure that static augmentations (without magnitude) are
             less common for small magnitudes. All augmentations are equally likely for magnitude == 1.
-        >>> randaugment = RandAugment(1, magnitude=0.0)
+#         >>> randaugment = RandAugment(1, magnitude=0.0)
+#         >>> randaugment.get_augmentation_weights_for_magnitude()
+#         [0.0, 0.0, 0.0, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, \
+# 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, \
+# 0.09090909090909091, 0.09090909090909091]
+#         >>> randaugment = RandAugment(1, magnitude=1.0)
+#         >>> randaugment.get_augmentation_weights_for_magnitude()
+#         [0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
+# 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
+# 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142]
+#         >>> randaugment = RandAugment(1, magnitude=0.5)
+#         >>> randaugment.get_augmentation_weights_for_magnitude()
+#         [0.03571428571428571, 0.03571428571428571, 0.03571428571428571, 0.08116883116883117, 0.08116883116883117, \
+# 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, \
+# 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117]
+#         >>> randaugment = RandAugment(1, magnitude=0.2)
+#         >>> randaugment.get_augmentation_weights_for_magnitude()
+#         [0.014285714285714285, 0.014285714285714285, 0.014285714285714285, 0.08701298701298701, 0.08701298701298701, \
+# 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, \
+# 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701]
+        >>> # Only Static Aug
+        >>> randaugment = RandAugment(1, magnitude=0.2, augmentation_list=[Identity()])
         >>> randaugment.get_augmentation_weights_for_magnitude()
-        [0.0, 0.0, 0.0, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, \
-0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, 0.09090909090909091, \
-0.09090909090909091, 0.09090909090909091]
-        >>> randaugment = RandAugment(1, magnitude=1.0)
+        [0.2]
+        >>> randaugment = RandAugment(1, magnitude=1.0, augmentation_list=[Identity()])
         >>> randaugment.get_augmentation_weights_for_magnitude()
-        [0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
-0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142, \
-0.07142857142857142, 0.07142857142857142, 0.07142857142857142, 0.07142857142857142]
-        >>> randaugment = RandAugment(1, magnitude=0.5)
+        [1.0]
+        >>> # Only Ranged Aug
+        >>> randaugment = RandAugment(1, magnitude=0.3, augmentation_list=[ShearX()])
         >>> randaugment.get_augmentation_weights_for_magnitude()
-        [0.03571428571428571, 0.03571428571428571, 0.03571428571428571, 0.08116883116883117, 0.08116883116883117, \
-0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117, \
-0.08116883116883117, 0.08116883116883117, 0.08116883116883117, 0.08116883116883117]
-        >>> randaugment = RandAugment(1, magnitude=0.2)
+        [1.0]
+        >>> randaugment = RandAugment(1, magnitude=0.3, augmentation_list=[ShearX(), ShearY(), Identity()])
         >>> randaugment.get_augmentation_weights_for_magnitude()
-        [0.014285714285714285, 0.014285714285714285, 0.014285714285714285, 0.08701298701298701, 0.08701298701298701, \
-0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, \
-0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701]
+        [0.45, 0.45, 0.09999999999999999]
+        >>> randaugment = RandAugment(1, magnitude=1.0, augmentation_list=[ShearX(), ShearY(), Identity()])
+        >>> randaugment.get_augmentation_weights_for_magnitude()
+        [0.33333333333333337, 0.33333333333333337, 0.3333333333333333]
         """
         # Extract all static / non-static augmentations
         static_augs = np.array([aug for aug in self.augment_list if isinstance(aug, StaticAugmentation)])
@@ -399,5 +416,5 @@ class RandAugment:
         # f(x) = x * max_weight for x <= 1.0
         static_weight = self.magnitude() * max_weight
         # Calculate other weights depending on static weight (makes sure result is a prob. distribution)
-        other_weight = (1 - (static_weight * len(static_augs))) / len(non_static_augs)
+        other_weight =  (1 - (static_weight * len(static_augs))) / len(non_static_augs) if len(non_static_augs) > 0 else 0.0
         return [static_weight if isinstance(aug, StaticAugmentation) else other_weight for aug in self.augment_list]
