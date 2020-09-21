@@ -14,7 +14,6 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from torchvision import transforms
 
-
 import a2c_ppo_acktr.augmentation.augmenters as augmenters
 import a2c_ppo_acktr.augmentation.randaugment as randaugment
 from a2c_ppo_acktr.augmentation.wrappers import AugmentationObservationWrapper
@@ -70,6 +69,7 @@ def setup_randaugment_augmentation_list(randaugment_augs):
             augs.append(RANDAUGMENT_MAP[rand_aug]())
         return augs
 
+
 if __name__ == '__main__':
     parser = get_base_argument_parser()
     parser.description = "Evaluate performance of pre-trained model in environment with increasing" \
@@ -89,7 +89,7 @@ if __name__ == '__main__':
                         help='Number of completed episodes each run should perform in the environment')
     parser.add_argument('--num-warmup-episodes', type=int, default=0,
                         help='Number of episodes which are performed before the actual evaluation in order '
-                             'to let the environment warm-up, in order' 
+                             'to let the environment warm-up, in order'
                              'to prevent wrong results')
     parser.add_argument('--use-randaugment', action="store_true",
                         help='If set, randaugment is used to augment images in evaluation')
@@ -147,21 +147,21 @@ if __name__ == '__main__':
             for arg in vars(args):
                 file.write(str(arg) + ' ' + str(getattr(args, arg)) + '\n')
 
-
     # Environment setup
     grasping_env = CurriculumEnvLog(task='stackVel', curr='no_dr', initial_pose='close',
-                            act_type='continuous', renderer='egl',
-                            obs_type='img_state_reduced', use_dr=False, max_steps=150,
-                            restitution=0.5, gripper_delay=12, img_type='rgb',
-                            adaptive_task_difficulty=True, table_surface='brown_v4',
-                            position_error_obs=False, block_type='primitive', img_size="rl",
-                            movement_calib="old")
+                                    act_type='continuous', renderer='egl',
+                                    obs_type='img_state_reduced', use_dr=False, max_steps=150,
+                                    restitution=0.5, gripper_delay=12, img_type='rgb',
+                                    adaptive_task_difficulty=True, table_surface=table_surface,
+                                    position_error_obs=False, block_type='primitive', img_size="rl",
+                                    movement_calib="old",
+                                    env_params_sampler_dict=env_params_sampler_dict)
     experiment_env = build_env(grasping_env, normalize_obs=False)
 
     if use_randaugment:
         augmentation_list = setup_randaugment_augmentation_list(randaugment_augs)
         rand_aug = randaugment.RandAugment(num_augmentations=randaugment_num_augs, magnitude=0.0,
-                               augmentation_list=augmentation_list)
+                                           augmentation_list=augmentation_list)
         transforms = augmenters.transforms_from_randaugment(rand_aug)
         experiment_env = AugmentationObservationWrapper(experiment_env, transforms=transforms)
 
