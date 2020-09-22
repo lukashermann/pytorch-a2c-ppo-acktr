@@ -76,7 +76,7 @@ def set_seeds(cfg: SimpleNamespace):
 
 def setup_cuda(cfg: SimpleNamespace):
     """
-    Sets up cuda-specific setings
+    Sets up cuda-specific settings
     :param cfg:
     :returns device used for training
     """
@@ -233,6 +233,7 @@ def setup_consistency_loss_weight_fct(cfg):
 
 
 def setup_a2c_agent(cfg, actor_critic):
+    # TODO: is this used? check for correctness
     agent = algo.A2C_ACKTR(actor_critic, cfg.learning.rl.value_loss_coef,
                            cfg.learning.rl.entropy_coef, lr=cfg.learning.optimizer.lr,
                            eps=cfg.learning.optimizer.eps, alpha=cfg.learning.optimizer.alpha,
@@ -307,22 +308,20 @@ def setup_ppo_agent(cfg, actor_critic):
     return agent
 
 
-def setup_consistency_agent(cfg, actor_critic):
+def setup_consistency_agent(cfg, actor_critic, target_actor_critic):
     augmenter, augmentation_loss_weight_function, dataloader = setup_consistency_loss(cfg)
 
     agent = algo.Consistency(actor_critic,
                              cfg.globals.num_mini_batch,
-                             # cfg.learning.rl.value_loss_coef, cfg.learning.rl.entropy_coef,
                              max_grad_norm=cfg.learning.rl.max_grad_norm,
                              lr=cfg.learning.optimizer.lr,
                              eps=cfg.learning.optimizer.eps,
-                             num_epochs=4,
-                             # max_grad_norm=cfg.learning.rl.max_grad_norm,
                              augmenter=augmenter,
                              return_images=cfg.experiment.save_train_images,
                              augmentation_data_loader=dataloader,
                              augmentation_loss_weight_function=augmentation_loss_weight_function,
-                             force_ignore_loss_aug=cfg.learning.consistency_loss.force_disable_consistency)
+                             force_ignore_loss_aug=cfg.learning.consistency_loss.force_disable_consistency,
+                             target_actor_critic=target_actor_critic)
     return agent
 
 
@@ -480,16 +479,17 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
     return eval_episode_rewards
 
 
-def setup_agent(cfg, actor_critic):
+def setup_agent(cfg, actor_critic, target_actor_critic=None):
     if cfg.learning.rl.algo == 'a2c':
         return setup_a2c_agent(cfg, actor_critic)
     elif cfg.learning.rl.algo == 'ppo':
         return setup_ppo_agent(cfg, actor_critic)
     elif cfg.learning.rl.algo == 'acktr':
+        # TODO: Check for correctness, also check setup_a2c_agent() method
         return algo.A2C_ACKTR(actor_critic, cfg.learning.rl.value_loss_coef,
                               cfg.learning.rl.entropy_coef, acktr=True)
     elif cfg.learning.rl.algo == 'consistency':
-        return setup_consistency_agent(cfg, actor_critic)
+        return setup_consistency_agent(cfg, actor_critic, target_actor_critic)
 
 
 def save_eval_episode_rewards(cfg, eval_episode_rewards, step, total_num_steps, tb_writer, log_file, eval_name="_"):
@@ -556,7 +556,13 @@ def train(sysargs):
     episode_rewards = deque(maxlen=cfg.learning.curriculum.rew_q_len)
     train_success = deque(maxlen=cfg.learning.curriculum.rew_q_len)
     eval_episode_rewards = []
-    agent = setup_agent(cfg, actor_critic)
+
+    if cfg.learning.rl.algo != "consistency":
+        agent = setup_agent(cfg, actor_critic)
+    else:
+        target_actor_critic = setup_actor_critic(cfg, envs)
+        target_actor_critic.to(device)
+        agent = setup_agent(cfg, actor_critic, target_actor_critic=target_actor_critic)
 
     # ======== Training loop
     start = time.time()
