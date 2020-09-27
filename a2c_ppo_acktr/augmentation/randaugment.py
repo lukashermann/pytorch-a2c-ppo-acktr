@@ -6,15 +6,19 @@ Our implementation allows dynamically changing the randomization, allowing this 
 """
 import random
 
-import PIL, PIL.ImageOps, PIL.ImageEnhance, PIL.ImageDraw
-import numpy as np
+import PIL
+import PIL.ImageDraw
+import PIL.ImageEnhance
+import PIL.ImageOps
 from PIL import Image
 import abc
+import numpy as np
 from typing import List, Union
 
 
 class Augmentation(abc.ABC):
     """Augmentation base class"""
+
     def scale_magnitude_to_aug_range(self, magnitude=None):
         pass
 
@@ -24,6 +28,7 @@ class StaticAugmentation(Augmentation):
 
     def __call__(self, img, _=None):
         pass
+
 
 class RangedAugmentation(Augmentation):
     def __init__(self, min_value=0.0, max_value=1.0, reverse=False):
@@ -276,6 +281,24 @@ class Cutout(RangedAugmentation):
         return self.cutout_abs(img, magnitude)
 
 
+class CenterCropAndResize(RangedAugmentation):
+    def __init__(self, min_value=0.0, max_value=1.0):
+        super().__init__(min_value, max_value)
+
+    def __call__(self, img, magnitude):
+        super().__call__(img, magnitude)
+
+        output_size = img.size
+        # Crop by size of image/2 * magnitude, scale by 1/2 to make croping less prominent
+        crop_size = img.size[0] / 2 * magnitude / 2
+        crop_size = min(crop_size, 20)  # Set 20 pixel as min crop size
+
+        img_cropped = PIL.ImageOps.crop(img, crop_size)
+        img_resized = img_cropped.resize(output_size, Image.BILINEAR)
+
+        return img_resized
+
+
 # List taken from RandAugment Paper
 AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
                              Rotate(), Solarize(), Color(),
@@ -290,6 +313,18 @@ AUGMENTATION_LIST_SMALL_RANGE = [Identity(), AutoContrast(), Equalize(),
                                  Sharpness(), ShearX(min_value=-0.1, max_value=0.1),
                                  ShearY(min_value=-0.1, max_value=0.1),
                                  TranslateX(min_value=-0.1, max_value=0.1), TranslateY(min_value=-0.1, max_value=0.1)]
+
+AUGMENTATION_LIST_OURS = [CenterCropAndResize(),
+                          Identity(),
+                          Rotate(min_value=-10, max_value=10),
+                          Solarize(min_value=128, max_value=254),
+                          Color(),
+                          Posterize(min_value=6, max_value=8),
+                          Contrast(min_value=0.8, max_value=1.2),
+                          Brightness(min_value=0.8, max_value=1.2),
+                          Sharpness(),
+                          ShearX(min_value=-0.1, max_value=0.1),
+                          ShearY(min_value=-0.1, max_value=0.1)]
 
 
 class RandAugment:
@@ -416,5 +451,6 @@ class RandAugment:
         # f(x) = x * max_weight for x <= 1.0
         static_weight = self.magnitude() * max_weight
         # Calculate other weights depending on static weight (makes sure result is a prob. distribution)
-        other_weight =  (1 - (static_weight * len(static_augs))) / len(non_static_augs) if len(non_static_augs) > 0 else 0.0
+        other_weight = (1 - (static_weight * len(static_augs))) / len(non_static_augs) if len(
+            non_static_augs) > 0 else 0.0
         return [static_weight if isinstance(aug, StaticAugmentation) else other_weight for aug in self.augment_list]

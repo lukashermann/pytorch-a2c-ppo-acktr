@@ -12,14 +12,12 @@ import sys
 import numpy as np
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
-from torchvision import transforms
 
 import a2c_ppo_acktr.augmentation.augmenters as augmenters
 import a2c_ppo_acktr.augmentation.randaugment as randaugment
 from a2c_ppo_acktr.augmentation.wrappers import AugmentationObservationWrapper
 from a2c_ppo_acktr.play_model import Model, build_env, render_obs
 from gym_grasping.envs import CurriculumEnvLog
-from gym_grasping.envs.grasping_env import GraspingEnv
 from gym_grasping.envs.utils import import_env_params_from_file
 from gym_grasping.scripts.utils.args import get_and_create_output_dir, get_base_argument_parser
 
@@ -47,16 +45,24 @@ RANDAUGMENT_MAP = {
     "AutoContrast": randaugment.AutoContrast,
     "Equalize": randaugment.Equalize,
     "Rotate": randaugment.Rotate,
+    "Rotate_ours": randaugment.Rotate(min_value=-10, max_value=10),
     "Solarize": randaugment.Solarize,
+    "Solarize_ours": randaugment.Solarize(min_value=128, max_value=254),
     "Color": randaugment.Color,
     "Posterize": randaugment.Posterize,
+    "Posterize_ours": randaugment.Posterize(min_value=6, max_value=8),
     "Contrast": randaugment.Contrast,
+    "Contrast_ours": randaugment.Contrast(min_value=0.8, max_value=1.2),
     "Brightness": randaugment.Brightness,
+    "Brightness_ours": randaugment.Brightness(min_value=0.8, max_value=1.2),
     "Sharpness": randaugment.Sharpness,
     "ShearX": randaugment.ShearX,
+    "ShearX_ours": randaugment.ShearX(min_value=-0.1, max_value=0.1),
     "ShearY": randaugment.ShearY,
+    "ShearY_ours": randaugment.ShearY(min_value=-0.1, max_value=0.1),
     "TranslateX": randaugment.TranslateX,
-    "TranslateY": randaugment.TranslateY
+    "TranslateY": randaugment.TranslateY,
+    "CropAndResize": randaugment.CenterCropAndResize
 }
 
 
