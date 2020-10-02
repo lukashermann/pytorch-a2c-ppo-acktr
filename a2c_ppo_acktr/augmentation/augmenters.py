@@ -1,5 +1,8 @@
 import torch
-from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_SMALL_RANGE, RandAugment
+from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_SMALL_RANGE, RandAugment, \
+    AUGMENTATION_LIST_DEFAULT, AUGMENTATION_LIST_OURS, RANDAUGMENT_MAP
+import a2c_ppo_acktr.augmentation.randaugment as randaugment
+
 from torch import Tensor
 from torch import stack as torch_stack
 from torch.distributions import Transform
@@ -19,9 +22,91 @@ def get_transformer_by_name(name, **kwargs):
     if name == "color_transformer":
         return create_color_transformer(**kwargs)
     if name == "randaugment":
+        kwargs = get_transformer_args_from_dict(**kwargs)
         return create_randaugment_transformer(**kwargs)
     else:
         raise ValueError("Invalid Transformer: {}".format(name))
+
+
+def get_transformer_args_from_dict(**kwargs):
+    """
+    Parses augmentation arguments from dict
+
+    Main purpose: create augmentation_list from configuration file.
+
+    List of Augmentations
+    >>> args = {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': ['CenterCropAndResize', 'Rotate']}
+    >>> get_transformer_args_from_dict(**args)
+    {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': [CenterCropAndResize[0.0, 1.0], Rotate[-30, 30]]}
+
+
+    List of Augmentations with custom init arguments
+    >>> args = {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': [{'CenterCropAndResize': {'min_value': 0.2, 'max_value': 0.5}}, 'Rotate']}
+    >>> get_transformer_args_from_dict(**args)
+    {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': [CenterCropAndResize[0.2, 0.5], Rotate[-30, 30]]}
+
+    Single Augmentation
+    >>> args = {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': 'CenterCropAndResize'}
+    >>> get_transformer_args_from_dict(**args)
+    {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': [CenterCropAndResize[0.0, 1.0]]}
+
+    Single augmentation with custom init arguments
+    >>> args = {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': {'CenterCropAndResize': {'min_value': 0.2, 'max_value': 0.5}}}
+    >>> get_transformer_args_from_dict(**args)
+    {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': [CenterCropAndResize[0.2, 0.5]]}
+
+    Predefined List
+    >>> args = {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': 'AUGMENTATION_LIST_DEFAULT'}
+    >>> get_transformer_args_from_dict(**args)
+    {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': [Identity, AutoContrast, Equalize, Rotate[-30, 30], Solarize[0, 254], Color[0.1, 1.9], Posterize[4, 8], Contrast[0.1, 1.9], Brightness[0.1, 1.9], Sharpness[0.1, 1.9], ShearX[-0.3, 0.3], ShearY[-0.3, 0.3], TranslateX[-0.45, 0.45], TranslateY[-0.45, 0.45]]}
+
+    Invalid predefined List
+    >>> args = {'num_augmentations': 3, 'magnitude': 0.3, 'augmentation_list': 'SOME_LIST'}
+    >>> get_transformer_args_from_dict(**args)
+    Traceback (most recent call last):
+    ...
+    ValueError: Invalid parameter: augmentation_list SOME_LIST
+    """
+    if "augmentation_list" in kwargs:
+        augmentation_list = []
+
+        augmentations_list_args = kwargs["augmentation_list"]
+
+        if type(augmentations_list_args) == list:
+            for augmenter in augmentations_list_args:
+                augmentation_list.append(create_augmentation_from_dict(augmenter))
+        else:
+            # Either preconfigured List or single augmentation
+            if type(augmentations_list_args) == dict:
+                augmentation_list.append(create_augmentation_from_dict(augmentations_list_args))
+            elif augmentations_list_args in RANDAUGMENT_MAP:
+                augmentation_list.append(create_augmentation_from_dict(augmentations_list_args))
+            elif augmentations_list_args == "AUGMENTATION_LIST_DEFAULT":
+                augmentation_list = AUGMENTATION_LIST_DEFAULT
+            elif augmentations_list_args == "AUGMENTATION_LIST_SMALL_RANGE":
+                augmentation_list = AUGMENTATION_LIST_SMALL_RANGE
+            elif augmentations_list_args == "AUGMENTATION_LIST_OURS":
+                augmentation_list = AUGMENTATION_LIST_OURS
+            else:
+                raise ValueError("Invalid parameter: augmentation_list {}".format(augmentations_list_args))
+
+        kwargs["augmentation_list"] = augmentation_list
+    return kwargs
+
+
+def create_augmentation_from_dict(augmenter_args):
+    if type(augmenter_args) == str:
+        return RANDAUGMENT_MAP[augmenter_args]
+    elif type(augmenter_args) == dict:
+        augmenter_name = list(augmenter_args.keys())[0]
+        augmenter_params = augmenter_args[augmenter_name]
+
+        # Instantiate object and set attributes of object
+        augmenter = getattr(randaugment, augmenter_name)(**augmenter_params)
+
+        return augmenter
+    else:
+        raise ValueError("Unknown Augmentation {}".format(augmenter_args))
 
 
 def create_randaugment_transformer(num_augmentations=3, magnitude=0.3, augmentation_list=AUGMENTATION_LIST_SMALL_RANGE):
@@ -37,6 +122,7 @@ def transforms_from_randaugment(randaugment):
             transforms.ToTensor(),
             transforms.Lambda(lambda img: img * 255.0),  # TODO: Change obs range to [0, 1]
         ])
+
 
 def create_color_transformer(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5):
     """
