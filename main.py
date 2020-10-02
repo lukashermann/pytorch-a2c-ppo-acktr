@@ -411,7 +411,10 @@ def save_image(cfg, agent_train_images, tb_writer_img, current_update_step):
 
 
 def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, eval_log_dir, tb_writer_img,
-                 eval_name="eval"):
+                 eval_name="eval", ignore_update_step=False):
+    """
+    ignore_update_step: set to true if evaluation is outside of training loop
+    """
     eval_steps = 32 if update_step < num_updates - 1 else 100
 
     env_args = {"env_params_sampler_dict": cfg.env.params_file,
@@ -424,16 +427,6 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
         env_args=env_args
     )
 
-    # TODO: Dead code?
-    # vec_norm = get_vec_normalize(eval_envs)
-    # if vec_norm is not None:
-    #     vec_norm.eval()
-    #     if cfg.learning.rl.actor_critic.combi_policy:
-    #         vec_norm.ob_robot_rms = get_vec_normalize(envs).ob_robot_rms
-    #         vec_norm.ob_task_rms = get_vec_normalize(envs).ob_task_rms
-    #     else:
-    #         vec_norm.ob_rms = get_vec_normalize(envs).ob_rms
-
     eval_episode_rewards = []
 
     obs = eval_envs.reset()
@@ -444,7 +437,10 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
 
     save_cnt = 0
     if cfg.experiment.save_eval_images and update_step % 300 == 0:
-        os.mkdir(os.path.join(eval_log_dir, "iter_{}_{}".format(update_step, eval_name)))
+        if not ignore_update_step:
+            os.mkdir(os.path.join(eval_log_dir, "iter_{}_{}".format(update_step, eval_name)))
+        else:
+            os.mkdir(os.path.join(eval_log_dir, "iter_other_{}".format(eval_name)))
 
     while len(eval_episode_rewards) <= eval_steps:
         with torch.no_grad():
@@ -460,12 +456,16 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
         if cfg.experiment.save_eval_images and update_step % 300 == 0 and save_cnt < 150:
             img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(
                 np.uint8)
-            cv2.imwrite(
-                os.path.join(eval_log_dir, "iter_{}_{}/img_{}.png".format(update_step, save_cnt, eval_name)), img)
+            if not ignore_update_step:
+                img_path = os.path.join(eval_log_dir, "iter_{}_{}/img_{}.png".format(update_step, eval_name, save_cnt))
+            else:
+                img_path = os.path.join(eval_log_dir, "iter_other_{}/img_{}.png".format(eval_name, save_cnt))
+            cv2.imwrite(img_path, img)
 
             # Tensorboard expects images to be in range [0, 1] for FloatTensor
             # TODO: Change obs range to [0, 1]
-            tb_writer_img.add_images(eval_name + "_" + str(update_step), obs['img'].cpu() / 255.0, save_cnt,
+            suffix = str(update_step) if not ignore_update_step else "-1"
+            tb_writer_img.add_images(eval_name + "_" + suffix, obs['img'].cpu() / 255.0, save_cnt,
                                      dataformats='NCHW')
             save_cnt += 1
 
@@ -563,6 +563,21 @@ def train(sysargs):
         target_actor_critic = setup_actor_critic(cfg, envs)
         target_actor_critic.to(device)
         agent = setup_agent(cfg, actor_critic, target_actor_critic=target_actor_critic)
+
+    # Evaluation on training domain
+    eval_episode_rewards = eval_episode(cfg, cfg.env.name, 0, 0, actor_critic, device,
+                                        cfg.eval_log_dir, tb_writer_img, "eval", ignore_update_step=True)
+    save_eval_episode_rewards(cfg, eval_episode_rewards, 0, 0, tb_writer, log_file)
+
+    if cfg.learning.consistency_loss.eval_target_env is not None:
+        # Evaluation on target domain (if set, only simulated envs supported)
+        eval_target_domain_env = cfg.learning.consistency_loss.eval_target_env
+        eval_episode_rewards_target_domain = eval_episode(cfg, eval_target_domain_env, 0, 0,
+                                                          actor_critic, device, cfg.eval_log_dir,
+                                                          tb_writer_img, "eval_target_domain", ignore_update_step=True)
+
+        save_eval_episode_rewards(cfg, eval_episode_rewards_target_domain, 0, 0, tb_writer, log_file,
+                                  eval_name="_target_domain_")
 
     # ======== Training loop
     start = time.time()

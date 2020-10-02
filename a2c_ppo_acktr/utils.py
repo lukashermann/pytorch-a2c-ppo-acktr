@@ -45,6 +45,7 @@ def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
     lr = initial_lr - (initial_lr * (epoch / float(total_num_epochs)))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 def update_linear_schedule_less(optimizer, epoch, total_num_epochs, initial_lr):
@@ -52,6 +53,7 @@ def update_linear_schedule_less(optimizer, epoch, total_num_epochs, initial_lr):
     lr = initial_lr - (initial_lr * (epoch / float(2 * total_num_epochs)))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 def update_linear_schedule_half(optimizer, epoch, total_num_epochs, initial_lr):
@@ -62,6 +64,7 @@ def update_linear_schedule_half(optimizer, epoch, total_num_epochs, initial_lr):
         lr = initial_lr - (initial_lr * (epoch / float(total_num_epochs)))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 def update_sr_schedule(optimizer, sr, initial_lr):
@@ -69,6 +72,7 @@ def update_sr_schedule(optimizer, sr, initial_lr):
     lr = initial_lr - (initial_lr * sr)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    return lr
 
 
 def init(module, weight_init, bias_init, gain=1):

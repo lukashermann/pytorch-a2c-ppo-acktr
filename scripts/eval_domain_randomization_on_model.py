@@ -10,6 +10,7 @@ import random
 import sys
 
 import numpy as np
+from a2c_ppo_acktr.augmentation.randaugment import RANDAUGMENT_MAP
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
@@ -40,39 +41,13 @@ def set_env_domain_randomization(grasping_env, domain_rand_amount):
     grasping_env.env_params.set_variable_difficulty_r("geom/object_to_gripper", 1)
 
 
-RANDAUGMENT_MAP = {
-    "Identity": randaugment.Identity,
-    "AutoContrast": randaugment.AutoContrast,
-    "Equalize": randaugment.Equalize,
-    "Rotate": randaugment.Rotate,
-    "Rotate_ours": randaugment.Rotate(min_value=-10, max_value=10),
-    "Solarize": randaugment.Solarize,
-    "Solarize_ours": randaugment.Solarize(min_value=128, max_value=254),
-    "Color": randaugment.Color,
-    "Posterize": randaugment.Posterize,
-    "Posterize_ours": randaugment.Posterize(min_value=6, max_value=8),
-    "Contrast": randaugment.Contrast,
-    "Contrast_ours": randaugment.Contrast(min_value=0.8, max_value=1.2),
-    "Brightness": randaugment.Brightness,
-    "Brightness_ours": randaugment.Brightness(min_value=0.8, max_value=1.2),
-    "Sharpness": randaugment.Sharpness,
-    "ShearX": randaugment.ShearX,
-    "ShearX_ours": randaugment.ShearX(min_value=-0.1, max_value=0.1),
-    "ShearY": randaugment.ShearY,
-    "ShearY_ours": randaugment.ShearY(min_value=-0.1, max_value=0.1),
-    "TranslateX": randaugment.TranslateX,
-    "TranslateY": randaugment.TranslateY,
-    "CropAndResize": randaugment.CenterCropAndResize
-}
-
-
 def setup_randaugment_augmentation_list(randaugment_augs):
     if randaugment_augs is None:
         return randaugment.AUGMENTATION_LIST_SMALL_RANGE
     else:
         augs = []
         for rand_aug in randaugment_augs:
-            augs.append(RANDAUGMENT_MAP[rand_aug]())
+            augs.append(RANDAUGMENT_MAP[rand_aug])
         return augs
 
 
