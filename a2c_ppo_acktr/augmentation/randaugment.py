@@ -22,6 +22,9 @@ class Augmentation(abc.ABC):
     def scale_magnitude_to_aug_range(self, magnitude=None):
         pass
 
+    def __repr__(self):
+        return type(self).__name__
+
 
 class StaticAugmentation(Augmentation):
     """Base class for augmentations without magnitude"""
@@ -93,6 +96,9 @@ class RangedAugmentation(Augmentation):
         AssertionError
         """
         assert self.min_value <= magnitude <= self.max_value
+
+    def __repr__(self):
+        return type(self).__name__ + "[" + str(self.min_value) + ", " + str(self.max_value) + "]"
 
 
 class SymmetricAugmentation(RangedAugmentation):
@@ -299,6 +305,26 @@ class CenterCropAndResize(RangedAugmentation):
         return img_resized
 
 
+class RandomCrop(RangedAugmentation):
+    def __init__(self, min_value=0.0, max_value=1.0):
+        super().__init__(min_value, max_value)
+
+    def __call__(self, img, magnitude):
+        super().__call__(img, magnitude)
+
+        # Sample cropping area
+
+        output_size = img.size
+        # Crop by size of image/2 * magnitude, scale by 1/2 to make croping less prominent
+        crop_size = img.size[0] / 2 * magnitude / 2
+        crop_size = min(crop_size, 20)  # Set 20 pixel as min crop size
+
+        img_cropped = PIL.ImageOps.crop(img, crop_size)
+        img_resized = img_cropped.resize(output_size, Image.BILINEAR)
+
+        return img_resized
+
+
 # List taken from RandAugment Paper
 AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
                              Rotate(), Solarize(), Color(),
@@ -307,24 +333,52 @@ AUGMENTATION_LIST_DEFAULT = [Identity(), AutoContrast(), Equalize(),
                              TranslateX(), TranslateY()]
 
 AUGMENTATION_LIST_SMALL_RANGE = [Identity(), AutoContrast(), Equalize(),
-                                 Rotate(min_value=-10, max_value=10), Solarize(min_value=128, max_value=254), Color(),
-                                 Posterize(min_value=6, max_value=8), Contrast(min_value=0.8, max_value=1.2),
+                                 Rotate(min_value=-10, max_value=10),
+                                 Solarize(min_value=128, max_value=254), Color(),
+                                 Posterize(min_value=6, max_value=8),
+                                 Contrast(min_value=0.8, max_value=1.2),
                                  Brightness(min_value=0.8, max_value=1.2),
                                  Sharpness(), ShearX(min_value=-0.1, max_value=0.1),
                                  ShearY(min_value=-0.1, max_value=0.1),
-                                 TranslateX(min_value=-0.1, max_value=0.1), TranslateY(min_value=-0.1, max_value=0.1)]
+                                 TranslateX(min_value=-0.1, max_value=0.1),
+                                 TranslateY(min_value=-0.1, max_value=0.1)]
 
 AUGMENTATION_LIST_OURS = [CenterCropAndResize(),
                           Identity(),
-                          Rotate(min_value=-10, max_value=10),
-                          Solarize(min_value=128, max_value=254),
+                          Rotate(),
+                          Solarize(),
                           Color(),
-                          Posterize(min_value=6, max_value=8),
-                          Contrast(min_value=0.8, max_value=1.2),
-                          Brightness(min_value=0.8, max_value=1.2),
+                          Posterize(),
+                          Contrast(),
+                          Brightness(),
                           Sharpness(),
-                          ShearX(min_value=-0.1, max_value=0.1),
-                          ShearY(min_value=-0.1, max_value=0.1)]
+                          ShearX(),
+                          ShearY()]
+
+RANDAUGMENT_MAP = {
+    "Identity": Identity(),
+    "AutoContrast": AutoContrast(),
+    "Equalize": Equalize(),
+    "Rotate": Rotate(),
+    "Rotate_ours": Rotate(min_value=-10, max_value=10),
+    "Solarize": Solarize(),
+    "Solarize_ours": Solarize(min_value=128, max_value=254),
+    "Color": Color(),
+    "Posterize": Posterize(),
+    "Posterize_ours": Posterize(min_value=6, max_value=8),
+    "Contrast": Contrast(),
+    "Contrast_ours": Contrast(min_value=0.8, max_value=1.2),
+    "Brightness": Brightness(),
+    "Brightness_ours": Brightness(min_value=0.8, max_value=1.2),
+    "Sharpness": Sharpness(),
+    "ShearX": ShearX(),
+    "ShearX_ours": ShearX(min_value=-0.1, max_value=0.1),
+    "ShearY": ShearY(),
+    "ShearY_ours": ShearY(min_value=-0.1, max_value=0.1),
+    "TranslateX": TranslateX(),
+    "TranslateY": TranslateY(),
+    "CenterCropAndResize": CenterCropAndResize()
+}
 
 
 class RandAugment:
@@ -378,7 +432,8 @@ class RandAugment:
         """
         assert self.__min_magnitude <= magnitude <= self.__max_magnitude
 
-        normalized_magnitude = (magnitude - self.__min_magnitude) / (self.__max_magnitude - self.__min_magnitude)
+        normalized_magnitude = (magnitude - self.__min_magnitude) / (
+                    self.__max_magnitude - self.__min_magnitude)
         self.__magnitude = normalized_magnitude
 
     def __call__(self, img: PIL.Image) -> PIL.Image:
@@ -393,7 +448,8 @@ class RandAugment:
         return self.__magnitude
 
     def choose_augs_by_magnitude(self):
-        return random.choices(self.augment_list, weights=self.get_augmentation_weights_for_magnitude(),
+        return random.choices(self.augment_list,
+                              weights=self.get_augmentation_weights_for_magnitude(),
                               k=self.num_augmentations)
 
     def get_augmentation_weights_for_magnitude(self):
@@ -441,8 +497,10 @@ class RandAugment:
         [0.33333333333333337, 0.33333333333333337, 0.3333333333333333]
         """
         # Extract all static / non-static augmentations
-        static_augs = np.array([aug for aug in self.augment_list if isinstance(aug, StaticAugmentation)])
-        non_static_augs = np.array([aug for aug in self.augment_list if isinstance(aug, RangedAugmentation)])
+        static_augs = np.array(
+            [aug for aug in self.augment_list if isinstance(aug, StaticAugmentation)])
+        non_static_augs = np.array(
+            [aug for aug in self.augment_list if isinstance(aug, RangedAugmentation)])
 
         # Define maximum weight each augmentation can get
         max_weight = 1.0 / len(self.augment_list)
@@ -453,4 +511,15 @@ class RandAugment:
         # Calculate other weights depending on static weight (makes sure result is a prob. distribution)
         other_weight = (1 - (static_weight * len(static_augs))) / len(non_static_augs) if len(
             non_static_augs) > 0 else 0.0
-        return [static_weight if isinstance(aug, StaticAugmentation) else other_weight for aug in self.augment_list]
+        return [static_weight if isinstance(aug, StaticAugmentation) else other_weight for aug in
+                self.augment_list]
+
+
+class SingleSampleRandAugment(RandAugment):
+    """
+    Alternative implementation of RandAugment where each augmentation is only sampled one.
+    """
+    def choose_augs_by_magnitude(self):
+        return random.sample(self.augment_list,
+                              weights=self.get_augmentation_weights_for_magnitude(),
+                              k=self.num_augmentations)
