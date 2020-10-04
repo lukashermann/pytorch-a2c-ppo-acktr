@@ -38,7 +38,7 @@ def get_transformer_by_name(name, **kwargs):
     except:
         raise ValueError("Invalid RandAugment class: {}".format(name))
 
-    return transforms_with_randaugment(augmenter)
+    return transforms_with_randaugment(augmenter, **kwargs)
 
 
 def get_transformer_args_from_dict(**kwargs):
@@ -129,14 +129,19 @@ def create_augmentation_from_dict(augmenter_args):
         raise ValueError("Unknown Augmentation {}".format(augmenter_args))
 
 
-def transforms_with_randaugment(randaugment):
-    return transforms.Compose([
-            transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
-            transforms.ToPILImage(),
-            randaugment,
-            transforms.ToTensor(),
-            transforms.Lambda(lambda img: img * 255.0),  # TODO: Change obs range to [0, 1]
-        ])
+def transforms_with_randaugment(randaugment, with_color_jitter=False, **kwargs):
+    transforms_list = [
+        transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
+        transforms.ToPILImage()
+    ]
+
+    transforms_list.append(randaugment)
+    if with_color_jitter:
+        transforms_list.append(transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0))
+
+    transforms_list.append(transforms.ToTensor())
+    transforms_list.append(transforms.Lambda(lambda img: img * 255.0))  # TODO: Change obs range to [0, 1])
+    return transforms_list
 
 
 def create_color_transformer(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5):

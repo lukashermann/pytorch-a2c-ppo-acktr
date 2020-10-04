@@ -388,7 +388,7 @@ class RandAugment:
 
     def __init__(self, num_augmentations: int = 1, magnitude: float = 0.0,
                  augmentation_list: List = AUGMENTATION_LIST_DEFAULT,
-                 min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0):
+                 min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0, **kwargs):
         """
         Args:
             num_augmentations: Number of augmentation transformations to apply sequentially.
@@ -579,6 +579,25 @@ class RandomMagnitudeRandaugment(RandAugment):
         Returns: random magnitude between min/max magnitude
         """
         return round(random.uniform(self.sample_min_magnitude, self.sample_max_magnitude), 3)
+
+class RandomMagnitudeSampledRandaugment(RandomMagnitudeRandaugment):
+
+    def choose_augs_by_magnitude(self):
+        """
+        Returns: list of augmentations from augmentation list
+        """
+
+        sample = set()
+        population = self.augment_list.copy()
+        weights = self.get_augmentation_sample_weights_for_magnitude()
+        while len(sample) < self.num_augmentations:
+            choice = random.choices(population, weights=weights, k=1)[0]  # single choice
+            sample.add(choice)
+            index = population.index(choice)
+            weights.pop(index)
+            population.remove(choice)
+            weights = [x / sum(weights) for x in weights]
+        return list(sample)
 
 
 class FixedAugment(RandAugment):
