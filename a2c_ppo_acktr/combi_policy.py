@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 
-from a2c_ppo_acktr.distributions import Categorical, DiagGaussian, Bernoulli
+from a2c_ppo_acktr.distributions import Categorical, DiagGaussian, Bernoulli, MultiDiscrete
 from a2c_ppo_acktr.utils import init
 
 
@@ -94,6 +93,9 @@ class CombiPolicy(nn.Module):
         elif action_space.__class__.__name__ == "MultiBinary":
             num_outputs = action_space.shape[0]
             self.dist = Bernoulli(self.base.output_size, num_outputs)
+        elif action_space.__class__.__name__ == 'MultiDiscrete':
+            num_outputs = np.sum(action_space.nvec)
+            self.dist = MultiDiscrete(self.base.output_size, num_outputs, action_space.nvec)
         else:
             raise NotImplementedError
 

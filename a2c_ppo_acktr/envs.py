@@ -11,8 +11,8 @@ from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-from baselines.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
-from baselines.common.vec_env.vec_normalize import DictVecNormalize as DictVecNormalize_
+# from baselines.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
+# from baselines.common.vec_env.vec_normalize import DictVecNormalize as DictVecNormalize_
 
 
 # try:
@@ -31,9 +31,9 @@ from baselines.common.vec_env.vec_normalize import DictVecNormalize as DictVecNo
 #     pass
 
 
-def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets, **env_kwargs):
+def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
     def _thunk():
-        env = gym.make(env_id, **env_kwargs)
+        env = gym.make(env_id)
 
         env.seed(seed + rank)
 
@@ -226,62 +226,62 @@ class DictVecPyTorch(VecEnvWrapper):
         return obs, reward, done, info
 
 
-class VecNormalize(VecNormalize_):
+class VecNormalize():
+    pass
+    # def __init__(self, *args, **kwargs):
+    #     super(VecNormalize, self).__init__(*args, **kwargs)
+    #     self.training = True
+    #
+    # def _obfilt(self, obs):
+    #     if self.ob_rms:
+    #         if self.training:
+    #             self.ob_rms.update(obs)
+    #         obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
+    #         return obs
+    #     else:
+    #         return obs
+    #
+    # def train(self):
+    #     self.training = True
+    #
+    # def eval(self):
+    #     self.training = False
 
-    def __init__(self, *args, **kwargs):
-        super(VecNormalize, self).__init__(*args, **kwargs)
-        self.training = True
 
-    def _obfilt(self, obs):
-        if self.ob_rms:
-            if self.training:
-                self.ob_rms.update(obs)
-            obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
-            return obs
-        else:
-            return obs
-
-    def train(self):
-        self.training = True
-
-    def eval(self):
-        self.training = False
-
-
-class DictVecNormalize(DictVecNormalize_):
-
-    def __init__(self, *args, **kwargs):
-        super(DictVecNormalize, self).__init__(*args, **kwargs)
-        self.training = True
-
-    def _obfilt(self, obs):
-        if isinstance(obs, dict):
-            if self.ob_robot_rms:
-                if self.training:
-                    self.ob_robot_rms.update(obs['robot_state'])
-                obs['robot_state'] = np.clip((obs['robot_state'] - self.ob_robot_rms.mean) / np.sqrt(self.ob_robot_rms.var + self.epsilon), -self.clipob,
-                                             self.clipob)
-                if self.training:
-                    self.ob_task_rms.update(obs['task_state'])
-                obs['task_state'] = np.clip(
-                    (obs['task_state'] - self.ob_task_rms.mean) / np.sqrt(self.ob_task_rms.var + self.epsilon),
-                    -self.clipob,
-                    self.clipob)
-                return obs
-        else:
-            if self.ob_rms:
-                if self.training:
-                    self.ob_rms.update(obs)
-                obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
-                return obs
-            else:
-                return obs
-
-    def train(self):
-        self.training = True
-
-    def eval(self):
-        self.training = False
+class DictVecNormalize():
+    pass
+    # def __init__(self, *args, **kwargs):
+    #     super(DictVecNormalize, self).__init__(*args, **kwargs)
+    #     self.training = True
+    #
+    # def _obfilt(self, obs):
+    #     if isinstance(obs, dict):
+    #         if self.ob_robot_rms:
+    #             if self.training:
+    #                 self.ob_robot_rms.update(obs['robot_state'])
+    #             obs['robot_state'] = np.clip((obs['robot_state'] - self.ob_robot_rms.mean) / np.sqrt(self.ob_robot_rms.var + self.epsilon), -self.clipob,
+    #                                          self.clipob)
+    #             if self.training:
+    #                 self.ob_task_rms.update(obs['task_state'])
+    #             obs['task_state'] = np.clip(
+    #                 (obs['task_state'] - self.ob_task_rms.mean) / np.sqrt(self.ob_task_rms.var + self.epsilon),
+    #                 -self.clipob,
+    #                 self.clipob)
+    #             return obs
+    #     else:
+    #         if self.ob_rms:
+    #             if self.training:
+    #                 self.ob_rms.update(obs)
+    #             obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
+    #             return obs
+    #         else:
+    #             return obs
+    #
+    # def train(self):
+    #     self.training = True
+    #
+    # def eval(self):
+    #     self.training = False
 
 
 # Derived from
