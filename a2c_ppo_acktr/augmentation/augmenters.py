@@ -19,13 +19,26 @@ def get_augmenter_by_name(name, **kwargs):
 
 
 def get_transformer_by_name(name, **kwargs):
+    """
+    Returns: Transformer instance with given parameters. See randaugment module for supported types
+
+    Args:
+        name:
+        **kwargs:
+
+    get_transformer_by_name("RandAugment", **{"num_augmentations": 10})
+
+    """
     if name == "color_transformer":
         return create_color_transformer(**kwargs)
-    if name == "randaugment":
-        kwargs = get_transformer_args_from_dict(**kwargs)
-        return create_randaugment_transformer(**kwargs)
-    else:
-        raise ValueError("Invalid Transformer: {}".format(name))
+
+    kwargs = get_transformer_args_from_dict(**kwargs)
+    try:
+        augmenter = getattr(randaugment, name)(**kwargs)
+    except:
+        raise ValueError("Invalid RandAugment class: {}".format(name))
+
+    return transforms_with_randaugment(augmenter)
 
 
 def get_transformer_args_from_dict(**kwargs):
@@ -95,26 +108,28 @@ def get_transformer_args_from_dict(**kwargs):
 
 
 def create_augmentation_from_dict(augmenter_args):
+    """
+    Args:
+        augmenter_args:
+
+    Returns:
+
+    """
     if type(augmenter_args) == str:
         return RANDAUGMENT_MAP[augmenter_args]
     elif type(augmenter_args) == dict:
-        augmenter_name = list(augmenter_args.keys())[0]
-        augmenter_params = augmenter_args[augmenter_name]
+        augmentation_name = list(augmenter_args.keys())[0]
+        augmentation_params = augmenter_args[augmentation_name]
 
         # Instantiate object and set attributes of object
-        augmenter = getattr(randaugment, augmenter_name)(**augmenter_params)
+        augmentation = getattr(randaugment, augmentation_name)(**augmentation_params)
 
-        return augmenter
+        return augmentation
     else:
         raise ValueError("Unknown Augmentation {}".format(augmenter_args))
 
 
-def create_randaugment_transformer(num_augmentations=3, magnitude=0.3, augmentation_list=AUGMENTATION_LIST_SMALL_RANGE):
-    randaugment = RandAugment(num_augmentations=num_augmentations, magnitude=magnitude, augmentation_list=augmentation_list)
-    return transforms_from_randaugment(randaugment)
-
-
-def transforms_from_randaugment(randaugment):
+def transforms_with_randaugment(randaugment):
     return transforms.Compose([
             transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
             transforms.ToPILImage(),

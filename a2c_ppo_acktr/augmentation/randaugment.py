@@ -405,7 +405,7 @@ class RandAugment:
         self.__max_magnitude = max_magnitude
 
         # Don't set this value manually, always use setter
-        self.__magnitude = None
+        self.__normalized_magnitude = None
         self.set_magnitude(magnitude)
 
     def set_magnitude(self, magnitude: Union[float, int]):
@@ -433,8 +433,8 @@ class RandAugment:
         assert self.__min_magnitude <= magnitude <= self.__max_magnitude
 
         normalized_magnitude = (magnitude - self.__min_magnitude) / (
-                    self.__max_magnitude - self.__min_magnitude)
-        self.__magnitude = normalized_magnitude
+                self.__max_magnitude - self.__min_magnitude)
+        self.__normalized_magnitude = normalized_magnitude
 
     def __call__(self, img: PIL.Image) -> PIL.Image:
         # https://stackoverflow.com/questions/3679694/a-weighted-version-of-random-choice
@@ -445,14 +445,13 @@ class RandAugment:
         return img
 
     def magnitude(self) -> float:
-        return self.__magnitude
+        return self.__normalized_magnitude
 
     def choose_augs_by_magnitude(self):
-        return random.choices(self.augment_list,
-                              weights=self.get_augmentation_weights_for_magnitude(),
+        return random.choices(self.augment_list, weights=self.get_augmentation_sample_weights_for_magnitude(),
                               k=self.num_augmentations)
 
-    def get_augmentation_weights_for_magnitude(self):
+    def get_augmentation_sample_weights_for_magnitude(self):
         """
         Returns: weights for augmentations, one weight for each augmentation in self.augment_list
             The weight depends on the magnitude of randaugment. For magnitude -> 0.0 this method will return 0.0 weight
@@ -480,20 +479,20 @@ class RandAugment:
 # 0.08701298701298701, 0.08701298701298701, 0.08701298701298701, 0.08701298701298701]
         >>> # Only Static Aug
         >>> randaugment = RandAugment(1, magnitude=0.2, augmentation_list=[Identity()])
-        >>> randaugment.get_augmentation_weights_for_magnitude()
+        >>> randaugment.get_augmentation_sample_weights_for_magnitude()
         [0.2]
         >>> randaugment = RandAugment(1, magnitude=1.0, augmentation_list=[Identity()])
-        >>> randaugment.get_augmentation_weights_for_magnitude()
+        >>> randaugment.get_augmentation_sample_weights_for_magnitude()
         [1.0]
         >>> # Only Ranged Aug
         >>> randaugment = RandAugment(1, magnitude=0.3, augmentation_list=[ShearX()])
-        >>> randaugment.get_augmentation_weights_for_magnitude()
+        >>> randaugment.get_augmentation_sample_weights_for_magnitude()
         [1.0]
         >>> randaugment = RandAugment(1, magnitude=0.3, augmentation_list=[ShearX(), ShearY(), Identity()])
-        >>> randaugment.get_augmentation_weights_for_magnitude()
+        >>> randaugment.get_augmentation_sample_weights_for_magnitude()
         [0.45, 0.45, 0.09999999999999999]
         >>> randaugment = RandAugment(1, magnitude=1.0, augmentation_list=[ShearX(), ShearY(), Identity()])
-        >>> randaugment.get_augmentation_weights_for_magnitude()
+        >>> randaugment.get_augmentation_sample_weights_for_magnitude()
         [0.33333333333333337, 0.33333333333333337, 0.3333333333333333]
         """
         # Extract all static / non-static augmentations
@@ -507,7 +506,7 @@ class RandAugment:
 
         # Use linear function to derive static weight
         # f(x) = x * max_weight for x <= 1.0
-        static_weight = self.magnitude() * max_weight
+        static_weight = self.__normalized_magnitude * max_weight
         # Calculate other weights depending on static weight (makes sure result is a prob. distribution)
         other_weight = (1 - (static_weight * len(static_augs))) / len(non_static_augs) if len(
             non_static_augs) > 0 else 0.0
@@ -519,7 +518,80 @@ class SingleSampleRandAugment(RandAugment):
     """
     Alternative implementation of RandAugment where each augmentation is only sampled one.
     """
+
+    def __init__(self, num_augmentations: int = 1, magnitude: float = 1.0,
+                 augmentation_list: List = AUGMENTATION_LIST_DEFAULT,
+                 min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0):
+
+        # Set magnitude to 1.0 to sample all augmentations with same probability
+        super(SingleSampleRandAugment, self).__init__(num_augmentations=num_augmentations, magnitude=1.0,
+                                                         augmentation_list=augmentation_list,
+                                                         min_magnitude=min_magnitude, max_magnitude=max_magnitude)
+        
+        assert len(augmentation_list) >= num_augmentations
+
     def choose_augs_by_magnitude(self):
-        return random.sample(self.augment_list,
-                              weights=self.get_augmentation_weights_for_magnitude(),
-                              k=self.num_augmentations)
+        """
+        Returns: list of augmentations from augmentation list
+        """
+
+        sample = set()
+        population = self.augment_list.copy()
+        weights = self.get_augmentation_sample_weights_for_magnitude()
+        while len(sample) < self.num_augmentations:
+            choice = random.choices(population, weights=weights, k=1)[0]  # single choice
+            sample.add(choice)
+            index = population.index(choice)
+            weights.pop(index)
+            population.remove(choice)
+            weights = [x / sum(weights) for x in weights]
+        return list(sample)
+
+
+class RandomMagnitudeRandaugment(RandAugment):
+    def __init__(self, num_augmentations: int = 1, magnitude: float = 1.0,
+                 augmentation_list: List = AUGMENTATION_LIST_DEFAULT,
+                 min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0,
+                 sample_min_magnitude=0.0, sample_max_magnitude=1.0):
+        """
+        Randomly samples a magnitude for each augmentation when RandAugment is called.
+
+        Args:
+            magnitude: Used for creating sample weights for augmentations (see super)
+            sample_min_magnitude: set maximum magnitude when sampling magnitude
+                Unrelated to min_magnitude, which is used to scale base magnitude (influencing augmentation sampling)
+            sample_max_magnitude: set maximum magnitude when sampling magnitude
+                Unrelated to max_magnitude, which is used to scale base magnitude (influencing augmentation sampling)
+        """
+        super(RandomMagnitudeRandaugment, self).__init__(num_augmentations=num_augmentations, magnitude=magnitude,
+                                                         augmentation_list=augmentation_list,
+                                                         min_magnitude=min_magnitude, max_magnitude=max_magnitude)
+
+        assert sample_min_magnitude >= 0.0
+        assert sample_max_magnitude <= 1.0
+
+        self.sample_min_magnitude = sample_min_magnitude
+        self.sample_max_magnitude = sample_max_magnitude
+
+    def magnitude(self) -> float:
+        """
+        Randomize magnitude when scaling augmentation
+        Returns: random magnitude between min/max magnitude
+        """
+        return round(random.uniform(self.sample_min_magnitude, self.sample_max_magnitude), 3)
+
+
+class FixedAugment(RandAugment):
+    """
+    Randaugment variant where augmentations are always fixed as specified in augmentation list
+    """
+    def choose_augs_by_magnitude(self):
+        return self.augment_list
+
+
+class FixedRandomMagnitudeAugment(RandomMagnitudeRandaugment, FixedAugment):
+    """
+    Combines FixedAugement and RandomMagnitudeRandaugment.
+    Resulting in a RandAugment variant, where the list of augmentations is fixed, but the magnitude is randomized.
+    """
+    pass

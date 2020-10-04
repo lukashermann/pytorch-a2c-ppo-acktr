@@ -143,7 +143,7 @@ if __name__ == '__main__':
         augmentation_list = setup_randaugment_augmentation_list(randaugment_augs)
         rand_aug = randaugment.RandAugment(num_augmentations=randaugment_num_augs, magnitude=0.0,
                                            augmentation_list=augmentation_list)
-        transforms = augmenters.transforms_from_randaugment(rand_aug)
+        transforms = augmenters.transforms_with_randaugment(rand_aug)
         experiment_env = AugmentationObservationWrapper(experiment_env, transforms=transforms)
 
     model_path = os.path.join(os.getcwd(), model_path)
