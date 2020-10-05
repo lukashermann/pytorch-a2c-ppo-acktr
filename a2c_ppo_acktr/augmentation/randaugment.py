@@ -521,7 +521,7 @@ class SingleSampleRandAugment(RandAugment):
 
     def __init__(self, num_augmentations: int = 1, magnitude: float = 1.0,
                  augmentation_list: List = AUGMENTATION_LIST_DEFAULT,
-                 min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0):
+                 min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0, **kwargs):
 
         # Set magnitude to 1.0 to sample all augmentations with same probability
         super(SingleSampleRandAugment, self).__init__(num_augmentations=num_augmentations, magnitude=1.0,
@@ -552,7 +552,7 @@ class RandomMagnitudeRandaugment(RandAugment):
     def __init__(self, num_augmentations: int = 1, magnitude: float = 1.0,
                  augmentation_list: List = AUGMENTATION_LIST_DEFAULT,
                  min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0,
-                 sample_min_magnitude=0.0, sample_max_magnitude=1.0):
+                 sample_min_magnitude=0.0, sample_max_magnitude=1.0, **kwargs):
         """
         Randomly samples a magnitude for each augmentation when RandAugment is called.
 
