@@ -3,10 +3,12 @@ import unittest
 from PIL import ImageChops, Image
 import numpy as np
 
-from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_DEFAULT, AUGMENTATION_LIST_SMALL_RANGE, Brightness, \
-    FixedAugment, RandAugment, RandomMagnitudeRandaugment, RangedAugmentation, Rotate, SingleSampleRandAugment, \
+from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_DEFAULT, \
+    AUGMENTATION_LIST_SMALL_RANGE, Brightness, \
+    FixedAugment, RandAugment, RandomMagnitudeRandaugment, RangedAugmentation, Rotate, \
+    SingleSampleRandAugment, \
     StaticAugmentation, \
-    SymmetricAugmentation
+    SymmetricAugmentation, FixedRandomMagnitudeAugment
 
 
 def calculate_image_differences_rms(image_1, image_2):
@@ -171,16 +173,16 @@ class FixedAugmentTestCase(unittest.TestCase):
         self.assertEqual(augmentations, AUGMENTATION_LIST_SMALL_RANGE)
 
 
-class FixedAugmentTestCase(unittest.TestCase):
+class FixedRandomMagnitudeAugmentTestCase(unittest.TestCase):
 
     def test_fixed_randaugment_with_random_magnitude_is_randomized(self):
-        randaugment = FixedAugmentTestCase(augmentation_list=AUGMENTATION_LIST_SMALL_RANGE)
+        randaugment = FixedRandomMagnitudeAugment(augmentation_list=AUGMENTATION_LIST_SMALL_RANGE)
 
         augmentations = randaugment.choose_augs_by_magnitude()
         self.assertEqual(augmentations, AUGMENTATION_LIST_SMALL_RANGE)
 
     def test_magnitude_is_randomized_with_max_magnitude(self):
-        randaugment = FixedAugmentTestCase(num_augmentations=100, sample_max_magnitude=0.5)
+        randaugment = FixedRandomMagnitudeAugment(num_augmentations=100, sample_max_magnitude=0.5)
 
         magnitudes = []
         for i in range(100):
