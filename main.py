@@ -642,6 +642,12 @@ def train(sysargs):
         value_loss, action_loss, dist_entropy, update_log = agent.update(rollouts)
         rollouts.after_update()
 
+        # Update target network in consistency loss
+        if cfg.learning.consistency_loss.target_model_update_frequency > 0 and \
+                (update_step % cfg.learning.consistency_loss.target_model_update_frequency == 0) and \
+                hasattr(agent, "update_target_critic"):
+            agent.update_target_critic(tau=cfg.learning.consistency_loss.target_model_discount)
+
         # save for every interval-th episode or for the last epoch
         if (update_step % cfg.experiment.save_interval == 0 or update_step == num_updates - 1) and cfg.save_dir != "":
             last_model_save_path = save_model(cfg, envs, actor_critic, update_step)

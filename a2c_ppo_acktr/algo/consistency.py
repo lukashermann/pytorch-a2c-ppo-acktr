@@ -6,6 +6,7 @@ import torch.optim as optim
 from a2c_ppo_acktr.combi_policy import CombiPolicy
 
 from a2c_ppo_acktr.augmentation.augmenters import Augmenter
+from a2c_ppo_acktr.utils import update_state_dict
 
 
 def are_models_equal(actor_critic, target_actor_critic):
@@ -77,12 +78,15 @@ class Consistency:
 
             if self.actor_critic.return_cnn_output:
                 _, actor_critic_action, _, _, _ = self.actor_critic.act(obs_batch, None, None, deterministic=True)
-                _, target_action, _, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
+                with torch.no_grad():
+                    _, target_action, _, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
             else:
                 _, actor_critic_action, _, _ = self.actor_critic.act(obs_batch, None, None, deterministic=True)
-                _, target_action, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
+                with torch.no_grad():
+                    _, target_action, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
 
             action_loss = torch.nn.functional.mse_loss(target_action.detach(), actor_critic_action)
+            # print("Actions: ", actor_critic_action == target_action)
 
             aug_obs_batch_orig = next(augmentation_data_loader_iter)
             # Move data to model's device
@@ -97,15 +101,31 @@ class Consistency:
                 masks_batch=None,
                 return_images=self.return_images)
 
-            action_loss.retain_grad()  # retain grad for norm calculation
-            action_loss_aug.retain_grad()
-            action_loss_aug_weight = self.augmentation_loss_weight_function(self.current_num_steps, action_loss.item())
+            # action_loss.retain_grad()  # retain grad for norm calculation
+            # action_loss_aug.retain_grad()
+            action_loss_aug_weight = self.augmentation_loss_weight_function(self.current_num_steps, action_loss)
             action_loss_aug_weighted = action_loss_aug_weight * action_loss_aug
 
             if self.force_ignore_loss_aug:
                 action_loss_sum = action_loss
             else:
                 action_loss_sum = action_loss + action_loss_aug_weighted
+            #
+            # print("="*20)
+            # print("Params Diff")
+            # for params in zip(list(self.actor_critic.base.cnn.parameters())[0],
+            #                   list(self.target_actor_critic.base.cnn.parameters())[0]):
+            #     params_model = params[0][0][0][0]
+            #     params_target = params[1][0][0][0]
+            #     print("Model : {}".format(params_model))
+            #     print("Target: {}".format(params_target))
+            #     diff = params_model - params_target
+            #
+            #     print("Diff:   {}".format(diff))
+            # total_diff = list(self.actor_critic.base.cnn.parameters())[0] - list(self.target_actor_critic.base.cnn.parameters())[0]
+            # print(total_diff)
+            # print(torch.sum(total_diff))
+            # print("="*20)
 
             self.optimizer.zero_grad()
             action_loss_sum.retain_grad()  # retain grad for norm calculation
@@ -136,6 +156,8 @@ class Consistency:
             if max_actions_batch >= update_log['action_max_value']:
                 update_log['action_max_value'] = max_actions_batch
 
+        # if self.update_count():
+        #     pass
         return update_log['value_loss'], update_log['action_loss'], update_log['dist_entropy'], update_log
 
     def init_update_logging(self, with_augmentation=False):
@@ -162,9 +184,9 @@ class Consistency:
 
         return update_log
 
-    def update_target_critic(self):
-        self.target_actor_critic.load_state_dict(self.actor_critic.state_dict())
+    def update_target_critic(self, tau=1.0):
+        update_state_dict(model=self.actor_critic, state_dict=self.actor_critic.state_dict(), tau=tau)
         self.target_actor_critic.eval()
-
         for param in self.target_actor_critic.parameters():
             param.requires_grad = False
+

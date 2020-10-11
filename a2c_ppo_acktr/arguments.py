@@ -153,6 +153,11 @@ def get_args(sysargs):
                         help="If set, an additional evaluation will be performed on the given environment with the set eval_interval")
     parser.add_argument('--learning.consistency_loss.force-disable-consistency', default=False, action="store_true",
                         help="If set to to true, the action loss is calculated without consistency loss")
+    parser.add_argument('--learning.consistency_loss.target-model-update-frequency', default=-1,
+                        help="If set to value > 0, the target model in the consistency loss will be updated with given "
+                             "frequency")
+    parser.add_argument('--learning.consistency_loss.target-model-discount', default=1.0,
+                        help="Discount of 1.0: use new weights for target model. Discount < 1.0: exponential moving avg.")
 
     # experiment
     parser.add_argument('--experiment.num-bc-epochs', type=int, default=1000,
