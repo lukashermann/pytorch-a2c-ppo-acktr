@@ -141,7 +141,7 @@ def transforms_with_randaugment(randaugment, with_color_jitter=False, **kwargs):
 
     transforms_list.append(transforms.ToTensor())
     transforms_list.append(transforms.Lambda(lambda img: img * 255.0))  # TODO: Change obs range to [0, 1])
-    return transforms_list
+    return transforms.Compose(transforms_list)
 
 
 def create_color_transformer(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5):
@@ -201,12 +201,13 @@ class TransformsAugmenter(Augmenter):
                                                      kwargs["masks_batch"]
 
         if self.use_cnn_loss:
-            value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, cnn_output_unlab = \
-                actor_critic.act(
-                    obs_batch,
-                    recurrent_hidden_states_batch,
-                    masks_batch,
-                    deterministic=True)
+            with torch.no_grad():
+                value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, cnn_output_unlab = \
+                        actor_critic.act(
+                            obs_batch,
+                            recurrent_hidden_states_batch,
+                            masks_batch,
+                            deterministic=True)
 
             value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug, cnn_output_unlab_aug = \
                 actor_critic.act(
@@ -215,12 +216,13 @@ class TransformsAugmenter(Augmenter):
                     masks_batch,
                     deterministic=True)
         else:
-            value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
-                actor_critic.act(
-                    obs_batch,
-                    recurrent_hidden_states_batch,
-                    masks_batch,
-                    deterministic=True)
+            with torch.no_grad():
+                value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
+                        actor_critic.act(
+                            obs_batch,
+                            recurrent_hidden_states_batch,
+                            masks_batch,
+                            deterministic=True)
 
             value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug = \
                 actor_critic.act(
@@ -236,8 +238,9 @@ class TransformsAugmenter(Augmenter):
 
         # Detach action_unlab to prevent the gradient flow through the network
         if self.use_cnn_loss:
+            aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(), action_unlab_aug)
             # Cosine similarity is defined between -1 to 1, where 1 is most similar -> Flip via 1 - loss
-            aug_loss = 1 - torch.nn.functional.cosine_similarity(cnn_output_unlab.detach(), cnn_output_unlab_aug).mean()
+            # aug_loss = 1 - torch.nn.functional.cosine_similarity(cnn_output_unlab.detach(), cnn_output_unlab_aug).mean()
         else:
             aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(), action_unlab_aug)
 
