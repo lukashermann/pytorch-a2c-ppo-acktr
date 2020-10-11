@@ -31,9 +31,9 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 #     pass
 
 
-def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
+def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets, **env_kwargs):
     def _thunk():
-        env = gym.make(env_id)
+        env = gym.make(env_id, **env_kwargs)
 
         env.seed(seed + rank)
 
