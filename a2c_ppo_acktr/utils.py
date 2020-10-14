@@ -87,9 +87,9 @@ def update_state_dict(model, state_dict, tau=1.0):
     ``tau==1`` applies hard update, copying the values, ``0<tau<1``
     applies soft update: ``tau * new + (1 - tau) * old``.
     """
-    if tau == 1:
+    if tau == 1.0:
         model.load_state_dict(state_dict)
-    elif tau > 0:
-        update_sd = {k: tau * state_dict[k] + (1 - tau) * v
+    elif tau > 0.0:
+        update_sd = {k: tau * state_dict[k] + (1.0 - tau) * v
                      for k, v in model.state_dict().items()}
         model.load_state_dict(update_sd)

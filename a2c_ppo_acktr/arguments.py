@@ -156,7 +156,7 @@ def get_args(sysargs):
     parser.add_argument('--learning.consistency_loss.target-model-update-frequency', default=-1,
                         help="If set to value > 0, the target model in the consistency loss will be updated with given "
                              "frequency")
-    parser.add_argument('--learning.consistency_loss.target-model-discount', default=1.0,
+    parser.add_argument('--learning.consistency_loss.target-model-discount', default=1.0, type=float,
                         help="Discount of 1.0: use new weights for target model. Discount < 1.0: exponential moving avg.")
 
     # experiment

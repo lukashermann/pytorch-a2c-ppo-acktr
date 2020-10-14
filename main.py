@@ -138,7 +138,12 @@ def setup_dirs_and_logging(cfg: SimpleNamespace):
     # curriculum_log_file = open(os.path.join(cfg.log_dir, "curriculum_log.json"), 'w')
 
     # Copy original configuration if present to new location
-    shutil.copyfile(str(cfg.config[0]), os.path.join(cfg.log_dir, "config.yaml"))
+    shutil.copyfile(str(cfg.config[0]), os.path.join(cfg.log_dir, "config_original.yaml"))
+
+    with open(os.path.join(cfg.log_dir, "config.yaml"), 'w+') as file:
+        yaml.dump(vars(cfg), file)
+
+
 
     return tb_writer, tb_writer_img, log_file
 
