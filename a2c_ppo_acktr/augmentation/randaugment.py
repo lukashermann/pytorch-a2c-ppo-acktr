@@ -516,7 +516,7 @@ class RandAugment:
 
 class SingleSampleRandAugment(RandAugment):
     """
-    Alternative implementation of RandAugment where each augmentation is only sampled one.
+    Alternative implementation of RandAugment where each augmentation is only sampled once.
     """
 
     def __init__(self, num_augmentations: int = 1, magnitude: float = 1.0,

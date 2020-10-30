@@ -130,7 +130,7 @@ def get_args(sysargs):
     parser.add_argument('--learning.consistency_loss.transformer.args_path', type=str, default=None,
                         help='Path to .yaml file containing transformer arguments. If not set, some default '
                              'values will be applied.')
-    parser.add_argument('--learning.consistency_loss.dataset-folder', default=None,
+    parser.add_argument('--learning.consistency_loss.dataset-folder', default=None, nargs='+',
                         help="Root folder containing dataset data")
     parser.add_argument('--learning.consistency_loss.dataloader-batch-size', default='same',
                         help="Batch size of dataset dataloader. If set to same, dataloader will"
@@ -176,6 +176,8 @@ def get_args(sysargs):
                         help='port to run the visualization server on (default: 8097)')
     parser.add_argument('--experiment.save-eval-images', action='store_true', default=False,
                         help='Save evaluation images')
+    parser.add_argument('--experiment.save-eval-interval', action='store_true', default=300,
+                        help='Interval between update steps where eval images should be saved')
     parser.add_argument('--experiment.save-train-images', action='store_true', default=False,
                         help='Save training images every save_interval steps')
     parser.add_argument('--experiment.consistency_loss.use-augmentation-loss', action='store_true', default=False,

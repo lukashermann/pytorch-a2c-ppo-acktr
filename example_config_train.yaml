@@ -76,6 +76,7 @@ experiment:
   vis_interval: 1
   vis_port: 8097
   save_eval_images: false
+  save_eval_interval: 300
   save_train_images: false
   root_dir: /tmp/a2c_ppo_acktr
   save_dir: /tmp/a2c_ppo_acktr

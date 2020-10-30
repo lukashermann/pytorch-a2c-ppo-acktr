@@ -19,6 +19,7 @@ import yaml
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset
 
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
@@ -281,8 +282,15 @@ def setup_consistency_loss(cfg):
         augmenter = setup_augmenter(cfg)
         augmentation_loss_weight_function = setup_consistency_loss_weight_fct(cfg)
 
-        if cfg.learning.consistency_loss.dataset_folder is not None:
-            dataset = ObsDataset(root_folder=cfg.learning.consistency_loss.dataset_folder,
+        dataset_folder = cfg.learning.consistency_loss.dataset_folder
+        if dataset_folder is not None:
+            if type(dataset_folder) == list:
+                datasets = []
+                for d in dataset_folder:
+                    datasets.append(ObsDataset(root_folder=d, one_file_per_step=True))
+                dataset = ConcatDataset(datasets)
+            else:
+                dataset = ObsDataset(root_folder=cfg.learning.consistency_loss.dataset_folder,
                                  one_file_per_step=True)
 
             # Batch size is depending on the rollout for the agent algorithm (defined later)
@@ -416,7 +424,7 @@ def save_image(cfg, agent_train_images, tb_writer_img, current_update_step):
 
 
 def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, eval_log_dir, tb_writer_img,
-                 eval_name="eval", ignore_update_step=False):
+                 eval_name="eval", ignore_update_step=False, ):
     """
     ignore_update_step: set to true if evaluation is outside of training loop
     """
@@ -441,7 +449,7 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
     eval_masks = torch.zeros(cfg.globals.num_processes, 1, device=device)
 
     save_cnt = 0
-    if cfg.experiment.save_eval_images and update_step % 300 == 0:
+    if cfg.experiment.save_eval_images and update_step % cfg.experiment.save_eval_interval == 0:
         if not ignore_update_step:
             os.mkdir(os.path.join(eval_log_dir, "iter_{}_{}".format(update_step, eval_name)))
         else:
@@ -458,7 +466,7 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
 
         # Obser reward and next obs
         obs, reward, done, infos = eval_envs.step(action)
-        if cfg.experiment.save_eval_images and update_step % 300 == 0 and save_cnt < 150:
+        if cfg.experiment.save_eval_images and update_step % cfg.experiment.save_eval_interval == 0 and save_cnt < 150:
             img = obs['img'].cpu().numpy()[0, ::-1, :, :].transpose((1, 2, 0)).astype(
                 np.uint8)
             if not ignore_update_step:
