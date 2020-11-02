@@ -36,7 +36,7 @@ from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule, \
 from a2c_ppo_acktr.visualize import visdom_plot
 
 # DO NOT REMOVE - importing this class also imports gym environments
-from gym_grasping.envs.grasping_env import GraspingEnv
+from gym_grasping.envs.robot_sim_env import RobotSimEnv
 
 
 class NumpyEncoder(json.JSONEncoder):
