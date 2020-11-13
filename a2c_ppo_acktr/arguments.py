@@ -49,6 +49,10 @@ def get_args(sysargs):
                         help='add timestep to observations')
     parser.add_argument('--env.num-framestack', type=int, default=1,
                         help='Num frame stack')
+    # Could be removed in the future
+    parser.add_argument('--env.is-multi-discrete', action='store_true', default=False,
+                        help='Set this to true if the env uses multi-discrete actions.')
+
 
     # learning.rl
     parser.add_argument('--learning.rl.algo', default='ppo',

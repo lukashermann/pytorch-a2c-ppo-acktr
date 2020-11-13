@@ -86,8 +86,6 @@ class CombiPolicy(nn.Module):
             self.return_action_probs = base_kwargs["return_action_probs"]
         else:
             self.return_action_probs = False
-        # TODO: Temporary set to true
-        self.return_action_probs = True
 
         self.base = base(obs_space, **base_kwargs)
 

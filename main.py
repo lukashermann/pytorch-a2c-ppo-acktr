@@ -192,6 +192,8 @@ def setup_actor_critic(cfg, envs):
                        'cnn_architecture': cfg.learning.rl.actor_critic.cnn_architecture}
         if cfg.learning.consistency_loss.use_cnn_loss:
             base_kwargs["return_cnn_output"] = True
+        if cfg.env.is_multi_discrete:
+            base_kwargs["return_action_probs"] = True
 
         actor_critic = CombiPolicy(envs.observation_space, envs.action_space,
                                    base_kwargs=base_kwargs,
@@ -457,7 +459,7 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
             if cfg.learning.consistency_loss.use_cnn_loss:
                 _, action, _, eval_recurrent_hidden_states, _ = actor_critic.act(
                     obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
-            elif True: # Fix missing check for return action probs
+            elif cfg.env.is_multi_discrete:
                 _, action, _, eval_recurrent_hidden_states, _ = actor_critic.act(
                     obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
             else:
@@ -611,7 +613,7 @@ def train(sysargs):
                     if cfg.learning.consistency_loss.use_cnn_loss:
                         value, action, action_log_prob, recurrent_hidden_states, cnn_output = actor_critic.act(
                             *act_args)
-                    elif True: # TODO: Fix condition for action probs
+                    elif cfg.env.is_multi_discrete:
                         value, action, action_log_prob, recurrent_hidden_states, _ = actor_critic.act(
                             *act_args)
                     else:
