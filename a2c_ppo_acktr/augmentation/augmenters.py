@@ -208,7 +208,7 @@ class TransformsAugmenter(Augmenter):
             self.transformer = transformer
 
         self.use_cnn_loss = kwargs["use_cnn_loss"] if "use_cnn_loss" in kwargs else False
-        self.with_actions_probs = True if "use_cnn_loss" in kwargs else True # TODO: FIX paramter!
+        self.with_actions_probs = kwargs["with_action_probs"] if "with_action_probs" in kwargs else False
         self.clip_aug_actions = kwargs["clip_aug_actions"] if "clip_aug_actions" in kwargs else False
 
     def _calculate_augmentation_loss(self, obs_batch, obs_batch_aug, **kwargs):

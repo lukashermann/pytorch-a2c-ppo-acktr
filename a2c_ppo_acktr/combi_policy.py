@@ -317,7 +317,7 @@ class CNNAsymmCombi(NNBase):
 
 
 class CNNCombi(NNBase):
-    def __init__(self, obs_space, recurrent=False, cnn_architecture="nature", output_fc_size=128, return_cnn_output=False):
+    def __init__(self, obs_space, recurrent=False, cnn_architecture="nature", output_fc_size=128, return_cnn_output=False, **kwargs):
         super(CNNCombi, self).__init__(recurrent, output_fc_size, output_fc_size)
 
         # If set to true, in addition to the regular network output, the network will return the cnn output

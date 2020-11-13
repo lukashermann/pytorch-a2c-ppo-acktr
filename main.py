@@ -267,6 +267,7 @@ def setup_augmenter(cfg):
     augmenter = augmenters.get_augmenter_by_name(cfg.learning.consistency_loss.augmenter,
                                                  augmenter_args={
                                                      "use_cnn_loss": cfg.learning.consistency_loss.use_cnn_loss,
+                                                     "with_action_probs": cfg.env.is_multi_discrete,
                                                      "clip_aug_actions": cfg.learning.consistency_loss.clip_aug_actions,
                                                      "transformer": transformer
                                                  })
