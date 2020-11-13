@@ -16,6 +16,24 @@ def are_models_equal(actor_critic, target_actor_critic):
     return True
 
 
+def encode_target(target_action_probs: torch.Tensor):
+    """
+
+    :param target_action_probs: probabilities of actions
+    :return: maximized target actions
+
+    Example:
+        input: [0.5, 0.3, 0.2]
+        output: [1.0, 0, 0]
+
+    >>> input = [0.5, 0.3, 0.2]
+    >>> output = encode_target(input)
+    >>> output
+    [1.0, 0.0, 0.0]
+    """
+    return target_action_probs
+
+
 class Consistency:
     def __init__(self,
                  actor_critic,
@@ -80,12 +98,25 @@ class Consistency:
                 _, actor_critic_action, _, _, _ = self.actor_critic.act(obs_batch, None, None, deterministic=True)
                 with torch.no_grad():
                     _, target_action, _, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
+            elif self.actor_critic.return_action_probs:
+                _, _, _, _, action_probs = self.actor_critic.act(obs_batch, None, None, deterministic=True)
+                with torch.no_grad():
+                    _, _, _, _, target_action_probs = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
+
+                target_action_probs = encode_target(target_action_probs)
+                # Rename for later usage in loss function
+                target_action = target_action_probs
+                actor_critic_action = action_probs
             else:
                 _, actor_critic_action, _, _ = self.actor_critic.act(obs_batch, None, None, deterministic=True)
                 with torch.no_grad():
                     _, target_action, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
 
-            action_loss = torch.nn.functional.mse_loss(target_action.detach(), actor_critic_action)
+            if self.actor_critic.return_action_probs:
+                # TODO: iterate over individual losses, sum them up
+                action_loss = torch.nn.functional.cross_entropy(actor_critic_action, target_action)
+            else:
+                action_loss = torch.nn.functional.mse_loss(target_action.detach(), actor_critic_action)
             # print("Actions: ", actor_critic_action == target_action)
 
             aug_obs_batch_orig = next(augmentation_data_loader_iter)

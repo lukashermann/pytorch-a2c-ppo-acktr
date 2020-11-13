@@ -82,6 +82,13 @@ class CombiPolicy(nn.Module):
         else:
             self.return_cnn_output = False
 
+        if "return_action_probs" in base_kwargs:
+            self.return_action_probs = base_kwargs["return_action_probs"]
+        else:
+            self.return_action_probs = False
+        # TODO: Temporary set to true
+        self.return_action_probs = True
+
         self.base = base(obs_space, **base_kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
@@ -123,11 +130,16 @@ class CombiPolicy(nn.Module):
         else:
             action = dist.sample()
 
+        if self.return_action_probs:
+            action_probs = dist.probs()
+
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
         if self.return_cnn_output:
             return value, action, action_log_probs, rnn_hxs, cnn_output
+        if self.return_action_probs:
+            return value, action, action_log_probs, rnn_hxs, action_probs
         return value, action, action_log_probs, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks):

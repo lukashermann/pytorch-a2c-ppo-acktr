@@ -149,3 +149,9 @@ class MultiCategorical(torch.distributions.Distribution):
     def mode(self):
         return torch.stack([torch.argmax(d.probs, dim=1) for d in self.dists], dim=-1)
 
+    def probs(self):
+        """
+        Returns a list of action probabilities, one for each dimension
+        :return:
+        """
+        return [d.probs for d in self.dists]

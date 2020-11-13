@@ -143,9 +143,6 @@ def setup_dirs_and_logging(cfg: SimpleNamespace):
 
     with open(os.path.join(cfg.log_dir, "config.yaml"), 'w+') as file:
         yaml.dump(vars(cfg), file)
-
-
-
     return tb_writer, tb_writer_img, log_file
 
 
@@ -460,6 +457,9 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
             if cfg.learning.consistency_loss.use_cnn_loss:
                 _, action, _, eval_recurrent_hidden_states, _ = actor_critic.act(
                     obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
+            elif True: # Fix missing check for return action probs
+                _, action, _, eval_recurrent_hidden_states, _ = actor_critic.act(
+                    obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
             else:
                 _, action, _, eval_recurrent_hidden_states = actor_critic.act(
                     obs, eval_recurrent_hidden_states, eval_masks, deterministic=True)
@@ -610,6 +610,9 @@ def train(sysargs):
                                 rollouts.masks[step])
                     if cfg.learning.consistency_loss.use_cnn_loss:
                         value, action, action_log_prob, recurrent_hidden_states, cnn_output = actor_critic.act(
+                            *act_args)
+                    elif True: # TODO: Fix condition for action probs
+                        value, action, action_log_prob, recurrent_hidden_states, _ = actor_critic.act(
                             *act_args)
                     else:
                         value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(*act_args)
