@@ -9,6 +9,30 @@ from torch.distributions import Transform
 from torchvision import transforms
 
 
+def encode_target(target_action_probs: torch.Tensor):
+    """
+    TODO: Refactor to utils method
+    :param target_action_probs: probabilities of actions
+    :return: maximized target actions
+
+    Example:
+        input: [0.5, 0.3, 0.2]
+        output: [1.0, 0, 0]
+
+    >>> input = [0.5, 0.3, 0.2]
+    >>> output = encode_target(input)
+    >>> output
+    [1.0, 0.0, 0.0]
+    """
+    results = []
+    for probs in target_action_probs:
+        max_idx = torch.argmax(probs, 1)
+        # one_hot = torch.FloatTensor(probs.shape)
+        # one_hot = one_hot.zero_()
+        # one_hot = one_hot.scatter_(1, max_idx, 1.0)
+        results.append(max_idx)
+    return results
+
 def get_augmenter_by_name(name, **kwargs):
     augmenter_args = kwargs["augmenter_args"] if "augmenter_args" in kwargs else {}
 
@@ -184,6 +208,7 @@ class TransformsAugmenter(Augmenter):
             self.transformer = transformer
 
         self.use_cnn_loss = kwargs["use_cnn_loss"] if "use_cnn_loss" in kwargs else False
+        self.with_actions_probs = True if "use_cnn_loss" in kwargs else True # TODO: FIX paramter!
         self.clip_aug_actions = kwargs["clip_aug_actions"] if "clip_aug_actions" in kwargs else False
 
     def _calculate_augmentation_loss(self, obs_batch, obs_batch_aug, **kwargs):
@@ -215,6 +240,22 @@ class TransformsAugmenter(Augmenter):
                     recurrent_hidden_states_batch,
                     masks_batch,
                     deterministic=True)
+        elif self.with_actions_probs:
+            with torch.no_grad():
+                value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, action_probs = \
+                    actor_critic.act(
+                        obs_batch,
+                        recurrent_hidden_states_batch,
+                        masks_batch,
+                        deterministic=True)
+
+            value_unlab_aug, action_unlab_aug, action_log_probs_unlab_aug, rnn_hxs_unlab_aug, action_probs_aug = \
+                actor_critic.act(
+                    obs_batch_aug,
+                    recurrent_hidden_states_batch,
+                    masks_batch,
+                    deterministic=True)
+            action_probs_aug = encode_target(action_probs_aug)
         else:
             with torch.no_grad():
                 value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
@@ -241,6 +282,11 @@ class TransformsAugmenter(Augmenter):
             aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(), action_unlab_aug)
             # Cosine similarity is defined between -1 to 1, where 1 is most similar -> Flip via 1 - loss
             # aug_loss = 1 - torch.nn.functional.cosine_similarity(cnn_output_unlab.detach(), cnn_output_unlab_aug).mean()
+        elif self.with_actions_probs:
+            losses = []
+            for a, t in zip(action_probs, action_probs_aug):
+                losses.append(torch.nn.functional.cross_entropy(a, t))
+            aug_loss = sum(losses)
         else:
             aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(), action_unlab_aug)
 

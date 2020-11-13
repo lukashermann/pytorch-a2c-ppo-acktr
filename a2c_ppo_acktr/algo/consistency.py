@@ -18,7 +18,7 @@ def are_models_equal(actor_critic, target_actor_critic):
 
 def encode_target(target_action_probs: torch.Tensor):
     """
-
+    TODO: Refactor to utils method
     :param target_action_probs: probabilities of actions
     :return: maximized target actions
 
@@ -31,7 +31,14 @@ def encode_target(target_action_probs: torch.Tensor):
     >>> output
     [1.0, 0.0, 0.0]
     """
-    return target_action_probs
+    results = []
+    for probs in target_action_probs:
+        max_idx = torch.argmax(probs, 1)
+        # one_hot = torch.FloatTensor(probs.shape)
+        # one_hot = one_hot.zero_()
+        # one_hot = one_hot.scatter_(1, max_idx, 1.0)
+        results.append(max_idx)
+    return results
 
 
 class Consistency:
@@ -114,7 +121,10 @@ class Consistency:
 
             if self.actor_critic.return_action_probs:
                 # TODO: iterate over individual losses, sum them up
-                action_loss = torch.nn.functional.cross_entropy(actor_critic_action, target_action)
+                losses = []
+                for a, t in zip(actor_critic_action, target_action):
+                    losses.append(torch.nn.functional.cross_entropy(a, t))
+                action_loss = sum(losses)
             else:
                 action_loss = torch.nn.functional.mse_loss(target_action.detach(), actor_critic_action)
             # print("Actions: ", actor_critic_action == target_action)
