@@ -172,7 +172,13 @@ def get_curriculum_args(cfg: SimpleNamespace, num_updates, tb_writer):
 
 
 def get_env_args(cfg):
-    env_kwargs = {"env_params_sampler_dict": cfg.env.params_file,
+    params_info = None
+
+    if cfg.env.params_file is not None:
+        with open(cfg.env.params_file) as env_config_file:
+            params_info = json.load(env_config_file)
+
+    env_kwargs = {"params_info": params_info,
                   "data_folder_path": cfg.env.data_folder_path}
     return env_kwargs
 
