@@ -436,8 +436,8 @@ def eval_episode(cfg, env_name, update_step, num_updates, actor_critic, device, 
     """
     eval_steps = 32 if update_step < num_updates - 1 else 100
 
-    env_args = {"env_params_sampler_dict": cfg.env.params_file,
-                "data_folder_path": cfg.env.data_folder_path}
+    env_args = get_env_args(cfg)
+
     eval_envs = make_vec_envs(
         env_name, cfg.globals.seed + cfg.globals.num_processes * update_step, cfg.globals.num_processes,
         cfg.learning.rl.gamma, eval_log_dir, cfg.env.add_timestep, device, True,
