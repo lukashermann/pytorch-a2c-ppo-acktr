@@ -285,7 +285,7 @@ class TransformsAugmenter(Augmenter):
         elif self.with_actions_probs:
             losses = []
             for a, t in zip(action_probs, action_probs_aug):
-                losses.append(torch.nn.functional.cross_entropy(a, t))
+                losses.append(torch.nn.functional.nll_loss(torch.log(a), t))
             aug_loss = sum(losses)
         else:
             aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(), action_unlab_aug)

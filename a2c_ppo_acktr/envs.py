@@ -195,6 +195,8 @@ class DictVecPyTorch(VecEnvWrapper):
         self.device = device
         # TODO: Fix data types
 
+
+
     def reset(self):
         obs = self.venv.reset()
         obs = {'img': torch.from_numpy(obs['img']).float().to(self.device),
