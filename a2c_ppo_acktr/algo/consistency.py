@@ -123,7 +123,7 @@ class Consistency:
                 # TODO: iterate over individual losses, sum them up
                 losses = []
                 for a, t in zip(actor_critic_action, target_action):
-                    losses.append(torch.nn.functional.cross_entropy(a, t))
+                    losses.append(torch.nn.functional.nll_loss(torch.log(a), t))
                 action_loss = sum(losses)
             else:
                 action_loss = torch.nn.functional.mse_loss(target_action.detach(), actor_critic_action)
