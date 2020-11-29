@@ -8,6 +8,10 @@ from torch import stack as torch_stack
 from torch.distributions import Transform
 from torchvision import transforms
 
+DEFAULT_COLOR_JITTER = {"brightness": 0.5,
+                        "contrast": 0.5,
+                        "saturation": 0.5,
+                        "hue": 0.5}
 
 def encode_target(target_action_probs: torch.Tensor):
     """
@@ -153,7 +157,7 @@ def create_augmentation_from_dict(augmenter_args):
         raise ValueError("Unknown Augmentation {}".format(augmenter_args))
 
 
-def transforms_with_randaugment(randaugment, with_color_jitter=False, **kwargs):
+def transforms_with_randaugment(randaugment, with_color_jitter=False, color_jitter_params=DEFAULT_COLOR_JITTER, **kwargs):
     transforms_list = [
         transforms.Lambda(lambda img: img / 255.0),  # TODO: Change obs range to [0, 1]
         transforms.ToPILImage()
@@ -161,7 +165,7 @@ def transforms_with_randaugment(randaugment, with_color_jitter=False, **kwargs):
 
     transforms_list.append(randaugment)
     if with_color_jitter:
-        transforms_list.append(transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0))
+        transforms_list.append(transforms.ColorJitter(**color_jitter_params))
 
     transforms_list.append(transforms.ToTensor())
     transforms_list.append(transforms.Lambda(lambda img: img * 255.0))  # TODO: Change obs range to [0, 1])
