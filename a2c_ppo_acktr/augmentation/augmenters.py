@@ -229,10 +229,12 @@ class TransformsAugmenter(Augmenter):
                                                      kwargs["recurrent_hidden_states_batch"], \
                                                      kwargs["masks_batch"]
 
+        target_actor_critic = kwargs['target_actor_critic'] if 'target_actor_critic' in kwargs else actor_critic
+
         if self.use_cnn_loss:
             with torch.no_grad():
                 value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, cnn_output_unlab = \
-                        actor_critic.act(
+                        target_actor_critic.act(
                             obs_batch,
                             recurrent_hidden_states_batch,
                             masks_batch,
@@ -244,10 +246,11 @@ class TransformsAugmenter(Augmenter):
                     recurrent_hidden_states_batch,
                     masks_batch,
                     deterministic=True)
+
         elif self.with_actions_probs:
             with torch.no_grad():
                 value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab, action_probs = \
-                    actor_critic.act(
+                    target_actor_critic.act(
                         obs_batch,
                         recurrent_hidden_states_batch,
                         masks_batch,
@@ -259,11 +262,12 @@ class TransformsAugmenter(Augmenter):
                     recurrent_hidden_states_batch,
                     masks_batch,
                     deterministic=True)
-            action_probs_aug = encode_target(action_probs_aug)
+            action_probs = encode_target(action_probs)
+
         else:
             with torch.no_grad():
                 value_unlab, action_unlab, action_log_probs_unlab, rnn_hxs_unlab = \
-                        actor_critic.act(
+                    target_actor_critic.act(
                             obs_batch,
                             recurrent_hidden_states_batch,
                             masks_batch,
@@ -288,7 +292,7 @@ class TransformsAugmenter(Augmenter):
             # aug_loss = 1 - torch.nn.functional.cosine_similarity(cnn_output_unlab.detach(), cnn_output_unlab_aug).mean()
         elif self.with_actions_probs:
             losses = []
-            for a, t in zip(action_probs, action_probs_aug):
+            for a, t in zip(action_probs_aug, action_probs):
                 losses.append(torch.nn.functional.nll_loss(torch.log(a), t))
             aug_loss = sum(losses)
         else:

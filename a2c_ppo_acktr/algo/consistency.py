@@ -105,6 +105,7 @@ class Consistency:
                 _, actor_critic_action, _, _, _ = self.actor_critic.act(obs_batch, None, None, deterministic=True)
                 with torch.no_grad():
                     _, target_action, _, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
+
             elif self.actor_critic.return_action_probs:
                 _, _, _, _, action_probs = self.actor_critic.act(obs_batch, None, None, deterministic=True)
                 with torch.no_grad():
@@ -114,19 +115,19 @@ class Consistency:
                 # Rename for later usage in loss function
                 target_action = target_action_probs
                 actor_critic_action = action_probs
+
             else:
                 _, actor_critic_action, _, _ = self.actor_critic.act(obs_batch, None, None, deterministic=True)
                 with torch.no_grad():
                     _, target_action, _, _ = self.target_actor_critic.act(obs_batch, None, None, deterministic=True)
 
             if self.actor_critic.return_action_probs:
-                # TODO: iterate over individual losses, sum them up
                 losses = []
                 for a, t in zip(actor_critic_action, target_action):
                     losses.append(torch.nn.functional.nll_loss(torch.log(a), t))
                 action_loss = sum(losses)
             else:
-                action_loss = torch.nn.functional.mse_loss(target_action.detach(), actor_critic_action)
+                action_loss = torch.nn.functional.mse_loss(actor_critic_action, target_action.detach())
             # print("Actions: ", actor_critic_action == target_action)
 
             aug_obs_batch_orig = next(augmentation_data_loader_iter)
@@ -137,6 +138,7 @@ class Consistency:
 
             action_loss_aug, aug_obs_batch_augmented, augmenter_loss_data = self.augmenter.calculate_loss(
                 actor_critic=self.actor_critic,
+                # target_actor_critic=self.target_actor_critic,
                 obs_batch=aug_obs_batch_orig,
                 recurrent_hidden_states_batch=None,
                 masks_batch=None,
@@ -227,6 +229,7 @@ class Consistency:
 
     def update_target_critic(self, tau=1.0):
         update_state_dict(model=self.actor_critic, state_dict=self.actor_critic.state_dict(), tau=tau)
+        # update_state_dict(model=self.target_actor_critic, state_dict=self.actor_critic.state_dict(), tau=tau)
         self.target_actor_critic.eval()
         for param in self.target_actor_critic.parameters():
             param.requires_grad = False
