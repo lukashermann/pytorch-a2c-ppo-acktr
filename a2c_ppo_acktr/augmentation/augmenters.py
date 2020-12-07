@@ -296,7 +296,7 @@ class TransformsAugmenter(Augmenter):
                 losses.append(torch.nn.functional.nll_loss(torch.log(a), t))
             aug_loss = sum(losses)
         else:
-            aug_loss = torch.nn.functional.mse_loss(action_unlab.detach(), action_unlab_aug)
+            aug_loss = torch.nn.functional.mse_loss(action_unlab_aug, action_unlab.detach())
 
         # Determine max action for tracing actions
         additional_data["action_aug_max_value"] = torch.max(torch.max(action_unlab), torch.max(action_unlab_aug))
