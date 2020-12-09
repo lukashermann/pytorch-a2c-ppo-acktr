@@ -138,7 +138,7 @@ class Consistency:
 
             action_loss_aug, aug_obs_batch_augmented, augmenter_loss_data = self.augmenter.calculate_loss(
                 actor_critic=self.actor_critic,
-                # target_actor_critic=self.target_actor_critic,
+                target_actor_critic=self.target_actor_critic,
                 obs_batch=aug_obs_batch_orig,
                 recurrent_hidden_states_batch=None,
                 masks_batch=None,
