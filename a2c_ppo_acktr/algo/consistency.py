@@ -138,7 +138,7 @@ class Consistency:
 
             action_loss_aug, aug_obs_batch_augmented, augmenter_loss_data = self.augmenter.calculate_loss(
                 actor_critic=self.actor_critic,
-                target_actor_critic=self.target_actor_critic,
+                # target_actor_critic=self.target_actor_critic,
                 obs_batch=aug_obs_batch_orig,
                 recurrent_hidden_states_batch=None,
                 masks_batch=None,
@@ -228,7 +228,7 @@ class Consistency:
         return update_log
 
     def update_target_critic(self, tau=1.0):
-        update_state_dict(model=self.target_actor_critic, state_dict=self.actor_critic.state_dict(), tau=tau)
+        update_state_dict(model=self.actor_critic, state_dict=self.actor_critic.state_dict(), tau=tau)
         self.target_actor_critic.eval()
         for param in self.target_actor_critic.parameters():
             param.requires_grad = False
