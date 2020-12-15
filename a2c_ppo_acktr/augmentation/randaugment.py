@@ -256,35 +256,64 @@ class Posterize(RangedAugmentation):
 
 
 class Cutout(RangedAugmentation):
-    def __init__(self, min_value=0.0, max_value=0.2):
-        super().__init__(min_value, max_value)
+    black = (0, 0, 0)
+    grey = (125, 123, 114)
 
-    def cutoutAbs(self, img, v):  # [0, 60] => percentage: [0, 0.2]
-        # assert 0 <= v <= 20
-        if v < 0:
-            return img
-        w, h = img.size
-        x0 = np.random.uniform(w)
-        y0 = np.random.uniform(h)
+    def __init__(self, hole_size=20, fixed_number_of_holes=-1, fill_color=grey, max_number_of_holes=4):
+        """
 
-        x0 = int(max(0, x0 - v / 2.))
-        y0 = int(max(0, y0 - v / 2.))
-        x1 = min(w, x0 + v)
-        y1 = min(h, y0 + v)
+        :param hole_size: size of holes
+        :param fixed_number_of_holes: if set, the number of holes is fixed (regardless of magnitude)
+        :param fill_color: color to be used to fill holes (r,g,b) int tuple
+        :param max_number_of_holes: maximum number of holes ()
+        """
+        super().__init__(min_value=0.0, max_value=1.0)
+        self.max_h_size = hole_size
+        self.max_w_size = hole_size
+        self.fill_color = fill_color
 
-        xy = (x0, y0, x1, y1)
-        color = (125, 123, 114)
-        # color = (0, 0, 0)
+        self.max_number_of_holes = max_number_of_holes
+        self.fixed_number_of_holes = fixed_number_of_holes
+
+    def cutout_abs(self, img, num_holes=1):
+        if self.fixed_number_of_holes > 0:
+            num_holes = self.fixed_number_of_holes
+
+        height, width = img.size
+
+        holes = []
+        for _n in range(num_holes):
+            y = random.randint(0, height)
+            x = random.randint(0, width)
+
+            y1 = np.clip(y - self.max_h_size // 2, 0, height)
+            y2 = np.clip(y1 + self.max_h_size, 0, height)
+            x1 = np.clip(x - self.max_w_size // 2, 0, width)
+            x2 = np.clip(x1 + self.max_w_size, 0, width)
+            holes.append((x1, y1, x2, y2))
+
         img = img.copy()
-        PIL.ImageDraw.Draw(img).rectangle(xy, color)
+        for hole in holes:
+            PIL.ImageDraw.Draw(img).rectangle(hole, self.fill_color)
         return img
 
     def __call__(self, img, magnitude):
         super().__call__(img, magnitude)
-        if magnitude <= 0.0: return img
+        if magnitude <= 0.0:
+            return img
 
-        magnitude = magnitude * img.size[0]
-        return self.cutout_abs(img, magnitude)
+        magnitude = int(magnitude * self.max_number_of_holes)
+        return self.cutout_abs(img, num_holes=magnitude)
+
+    def __repr__(self):
+        name = type(self).__name__
+        if self.fixed_number_of_holes > 0:
+            name += "_fixed_holes_" + str(self.fixed_number_of_holes)
+        else:
+            name += "_max_holes_" + str(self.max_number_of_holes)
+
+        name += "_color_" + str(self.fill_color)
+        return name
 
 
 class CenterCropAndResize(RangedAugmentation):
@@ -377,7 +406,13 @@ RANDAUGMENT_MAP = {
     "ShearY_ours": ShearY(min_value=-0.1, max_value=0.1),
     "TranslateX": TranslateX(),
     "TranslateY": TranslateY(),
-    "CenterCropAndResize": CenterCropAndResize()
+    "CenterCropAndResize": CenterCropAndResize(),
+    "CutoutBlack": Cutout(fill_color=(0, 0, 0)),
+    "CutoutGrey": Cutout(fill_color=(125, 123, 114)),
+    "CutoutBlackSingleHole": Cutout(fill_color=(0, 0, 0), fixed_number_of_holes=1),
+    "CutoutGreySingleHole": Cutout(fill_color=(125, 123, 114), fixed_number_of_holes=1),
+    "CutoutBlackVariant": Cutout(fill_color=(0, 0, 0), hole_size=5, max_number_of_holes=10),
+    "CutoutGreyVariant": Cutout(fill_color=(125, 123, 114), hole_size=5, max_number_of_holes=10)
 }
 
 
@@ -522,12 +557,11 @@ class SingleSampleRandAugment(RandAugment):
     def __init__(self, num_augmentations: int = 1, magnitude: float = 1.0,
                  augmentation_list: List = AUGMENTATION_LIST_DEFAULT,
                  min_magnitude: Union[float, int] = 0.0, max_magnitude: Union[float, int] = 1.0, **kwargs):
-
         # Set magnitude to 1.0 to sample all augmentations with same probability
         super(SingleSampleRandAugment, self).__init__(num_augmentations=num_augmentations, magnitude=1.0,
-                                                         augmentation_list=augmentation_list,
-                                                         min_magnitude=min_magnitude, max_magnitude=max_magnitude)
-        
+                                                      augmentation_list=augmentation_list,
+                                                      min_magnitude=min_magnitude, max_magnitude=max_magnitude)
+
         assert len(augmentation_list) >= num_augmentations
 
     def choose_augs_by_magnitude(self):
@@ -580,6 +614,7 @@ class RandomMagnitudeRandaugment(RandAugment):
         """
         return round(random.uniform(self.sample_min_magnitude, self.sample_max_magnitude), 3)
 
+
 class RandomMagnitudeSampledRandaugment(RandomMagnitudeRandaugment):
 
     def choose_augs_by_magnitude(self):
@@ -604,6 +639,7 @@ class FixedAugment(RandAugment):
     """
     Randaugment variant where augmentations are always fixed as specified in augmentation list
     """
+
     def choose_augs_by_magnitude(self):
         return self.augment_list
 

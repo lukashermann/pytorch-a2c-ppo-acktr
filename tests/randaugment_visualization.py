@@ -7,7 +7,7 @@ from PIL import Image
 from mpl_toolkits.axes_grid1 import ImageGrid
 
 from a2c_ppo_acktr.augmentation.randaugment import AUGMENTATION_LIST_DEFAULT, AUGMENTATION_LIST_SMALL_RANGE, \
-    RandAugment, StaticAugmentation
+    Cutout, RANDAUGMENT_MAP, RandAugment, StaticAugmentation
 
 
 def load_test_img(img_path):
@@ -42,7 +42,14 @@ if __name__ == '__main__':
     test_img_file = args.image_file
     test_img = load_test_img(test_img_file)
 
-    augmentation_list = get_augmentation_list(args.augmentation_list)
+    # augmentation_list = get_augmentation_list(args.augmentation_list)
+    augmentation_list = [RANDAUGMENT_MAP["CutoutGrey"],
+                         RANDAUGMENT_MAP["CutoutBlack"],
+                         RANDAUGMENT_MAP["CutoutBlackSingleHole"],
+                         RANDAUGMENT_MAP["CutoutGreySingleHole"],
+                         RANDAUGMENT_MAP["CutoutBlackVariant"],
+                         RANDAUGMENT_MAP["CutoutGreyVariant"]]
+
     magnitudes = np.linspace(0.0, 1.0, 5)
 
     if args.plot_grid:
@@ -78,10 +85,11 @@ if __name__ == '__main__':
                 if isinstance(augmentation, StaticAugmentation):
                     img = augmentation(test_img, None)
                     img.save(os.path.join(output_dir, "{}_{}.png".format(os.path.basename(test_img_file),
-                                                                            augmentation.__class__.__name__)))
+                                                                         str(augmentation))))
                     break
                 else:
                     aug_magnitude = augmentation.scale_magnitude_to_aug_range(magnitude)
                     img = augmentation(test_img, aug_magnitude)
                     img.save(os.path.join(output_dir, "{}_{}_{}.png".format(os.path.basename(test_img_file),
-                                                                            augmentation.__class__.__name__, magnitude)))
+                                                                            str(augmentation),
+                                                                            magnitude)))
