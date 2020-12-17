@@ -303,6 +303,11 @@ class Cutout(RangedAugmentation):
             return img
 
         magnitude = int(magnitude * self.max_number_of_holes)
+
+        # Make sure at least one hole is present
+        if magnitude == 0:
+            magnitude = 1
+
         return self.cutout_abs(img, num_holes=magnitude)
 
     def __repr__(self):
